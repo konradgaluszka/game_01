@@ -28,15 +28,52 @@ space.add(ball_body, ball_shape)
 
 
 # Define wall positions
-top_wall = pymunk.Segment(space.static_body, (50, 50), (750, 50), 20)
-bottom_wall = pymunk.Segment(space.static_body, (50, 550), (750, 550), 20)
-left_wall = pymunk.Segment(space.static_body, (50, 50), (50, 550), 20)
-right_wall = pymunk.Segment(space.static_body, (750, 50), (750, 550), 20)
+top_wall = pymunk.Segment(space.static_body, (0, 00), (800, 00), 20)
+bottom_wall = pymunk.Segment(space.static_body, (0, 600), (800, 600), 20)
+left_wall = pymunk.Segment(space.static_body, (0, 0), (00, 600), 20)
+right_wall = pymunk.Segment(space.static_body, (800, 0), (800, 600), 20)
 
 # Set wall elasticity (bouncy)
 for wall in [top_wall, bottom_wall, left_wall, right_wall]:
     wall.elasticity = 1.0
     space.add(wall)
+
+GOAL_WIDTH = 100
+GOAL_HEIGHT = 60  # Size of goal opening
+FIELD_TOP = 50
+FIELD_BOTTOM = 550
+FIELD_LEFT = 50
+FIELD_RIGHT = 750
+FIELD_CENTER_Y = (FIELD_TOP + FIELD_BOTTOM) // 2
+
+# Goal on the left
+left_goal_shape = pymunk.Poly.create_box(
+    space.static_body,
+    size=(5, GOAL_HEIGHT)
+)
+left_goal_shape.sensor = True
+left_goal_shape.collision_type = 10  # custom type
+
+# Goal on the right
+right_goal_shape = pymunk.Poly.create_box(
+    space.static_body,
+    size=(5, GOAL_HEIGHT)
+)
+right_goal_shape.sensor = True
+right_goal_shape.collision_type = 11
+space.add(left_goal_shape, right_goal_shape)
+
+# def goal_scored_left(arbiter, space, data):
+#     print("⚽ GOAL for RIGHT team!")
+#     return False  # No physical collision needed
+#
+# def goal_scored_right(arbiter, space, data):
+#     print("⚽ GOAL for LEFT team!")
+#     return False
+#
+# space.add_collision_handler(10, ball_shape.collision_type).begin = goal_scored_left
+# space.add_collision_handler(11, ball_shape.collision_type).begin = goal_scored_right
+
 
 
 # Player body + shape
@@ -118,6 +155,13 @@ while True:
     keys = pygame.key.get_pressed()
     force = 10000.0  # Tweak this value for speed
     now = time.time()
+
+    # Left goal (green)
+    pygame.draw.rect(screen, (0, 255, 0),
+                     pygame.Rect(FIELD_LEFT - 5, FIELD_CENTER_Y - GOAL_HEIGHT // 2, 5, GOAL_HEIGHT))
+    # Right goal (red)
+    pygame.draw.rect(screen, (255, 0, 0), pygame.Rect(FIELD_RIGHT, FIELD_CENTER_Y - GOAL_HEIGHT // 2, 5, GOAL_HEIGHT))
+
 
     # Before adding a new spring, remove the old one (if it exists)
     if dribble_spring in space.constraints:
