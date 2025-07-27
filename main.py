@@ -2,6 +2,7 @@ import pygame
 import sys
 import pymunk.pygame_util
 from drawing.drawing import draw_pitch, Player, Ball
+import time
 
 pygame.font.init()
 font = pygame.font.SysFont("Arial", 16)
@@ -41,11 +42,17 @@ for wall in [top_wall, bottom_wall, left_wall, right_wall]:
 # Player body + shape
 player_mass = 20
 player_moment = pymunk.moment_for_circle(1, 0, 15)
-player_body = pymunk.Body(player_mass, moment=99999)
+player_body = pymunk.Body(player_mass, moment=9999999)
 player_body.position = (200, 300)  # Starting position
 player_body.damping = 0.1 # Value between 0 (no damping) and 1 (no slowdown)
 player_body.elasticity = 0.1
 
+player_last_shot_time = 0
+DRIBBLE_COOLDOWN = 1.0
+dribble_spring = None
+slide_limit = None
+max_speed = 200
+ball_max_speed = 600
 
 def damp_player_velocity(body, gravity, damping, dt):
     pymunk.Body.update_velocity(body, gravity, 0.96, dt)  # strong slowdown
@@ -95,16 +102,6 @@ SHOT_STRENGTH = 500
 DRIBBLE_FORCE = 50
 CONTROL_RADIUS = 20
 
-dribble_spring = pymunk.DampedSpring(
-    player_body,             # Attach to player
-    ball_body,               # Attach to ball
-    (0, 0),                  # Anchor point on player (center)
-    (0, 0),                  # Anchor on ball
-    rest_length=25,          # How far the ball should stay in front
-    stiffness=100,           # Higher = stronger pull
-    damping=20               # Resistance to motion
-)
-space.add(dribble_spring)
 
 while True:
     for event in pygame.event.get():
@@ -120,6 +117,7 @@ while True:
 
     keys = pygame.key.get_pressed()
     force = 10000.0  # Tweak this value for speed
+    now = time.time()
 
     # Before adding a new spring, remove the old one (if it exists)
     if dribble_spring in space.constraints:
@@ -131,25 +129,39 @@ while True:
     else:
         front_offset = (0, 0)
 
-    dribble_spring = pymunk.DampedSpring(
-        player_body,
-        ball_body,
-        front_offset,
-        (0, 0),
-        rest_length=2,
-        stiffness=150,
-        damping=50
-    )
-    slide_limit = pymunk.SlideJoint(
-        player_body,
-        ball_body,
-        (0, 0),
-        (0, 0),
-        0,
-        20
-    )
-    space.add(dribble_spring, slide_limit)
 
+    diff = ball_body.position - player_body.position
+    if diff.length < DRIBBLE_DISTANCE:
+        if now - player_last_shot_time > DRIBBLE_COOLDOWN \
+                and dribble_spring not in space.constraints \
+                and slide_limit not in space.constraints:
+            dribble_spring = pymunk.DampedSpring(
+                player_body,
+                ball_body,
+                front_offset,
+                (0, 0),
+                rest_length=2,
+                stiffness=150,
+                damping=50
+            )
+            slide_limit = pymunk.SlideJoint(
+                player_body,
+                ball_body,
+                (0, 0),
+                (0, 0),
+                0,
+                20
+            )
+            space.add(dribble_spring, slide_limit)
+
+        if keys[pygame.K_d]:
+            direction = diff.normalized()
+            if dribble_spring in space.constraints:
+                space.remove(dribble_spring)
+            if slide_limit in space.constraints:
+                space.remove(slide_limit)
+            ball_body.apply_impulse_at_local_point(direction * SHOT_STRENGTH)  # adjust power
+            player_last_shot_time = time.time()
 
     if keys[pygame.K_UP]:
         player_body.apply_force_at_local_point((0, -force))
@@ -160,35 +172,19 @@ while True:
     if keys[pygame.K_RIGHT]:
         player_body.apply_force_at_local_point((force, 0))
 
-    if keys[pygame.K_d]:
-        # Only kick if near ball
-        diff = ball_body.position - player_body.position
-        if diff.length < DRIBBLE_DISTANCE:
-            direction = diff.normalized()
-            ball_body.apply_impulse_at_local_point(direction * SHOT_STRENGTH)  # adjust power
 
-    max_speed = 200
+
+
+
     if player_body.velocity.length > max_speed:
         player_body.velocity = player_body.velocity.normalized() * max_speed
 
-    ball_max_speed = 600
     if ball_body.velocity.length > ball_max_speed:
         player_body.velocity = player_body.velocity.normalized() * ball_max_speed
 
     # Vector from player to ball
     diff = ball_body.position - player_body.position
 
-    # Only try to dribble if ball is within range and player is moving
-    # if diff.length < CONTROL_RADIUS: #and player_body.velocity.length > 5:
-    #     desired_position = player_body.position + player_body.velocity.normalized() * DRIBBLE_DISTANCE
-    #     displacement = desired_position - ball_body.position
-    #     disp_x = round(displacement.x, 1)
-    #     disp_y = round(displacement.y, 1)
-    #     text = font.render(f"dx: {disp_x}, dy: {disp_y}", True, (255, 255, 255))  # white text
-    #     screen.blit(text, (ball_body.position.x + 20, ball_body.position.y - 20))
-    #
-    #     # Apply small force toward desired dribble spot
-    #     ball_body.apply_force_at_world_point(displacement * DRIBBLE_FORCE, ball_body.position)
 
     #for player in players:
      #   player.draw(screen)
