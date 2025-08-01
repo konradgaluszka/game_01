@@ -74,7 +74,6 @@ dribble_spring_left = None
 dribble_spring_right = None
 dribble_spring_back = None
 
-slide_limit = None
 max_speed = 200
 ball_max_speed = 600
 
@@ -183,8 +182,7 @@ while True:
             dribble_spring_back.anchor_a = player_body.position + back_offset
             dribble_spring_right.anchor_a = player_body.position + right_offset
         if now - player_last_shot_time > DRIBBLE_COOLDOWN \
-                and dribble_spring_front not in space.constraints \
-                and slide_limit not in space.constraints:
+                and dribble_spring_front not in space.constraints:
             dribble_spring_front = pymunk.DampedSpring(
                 space.static_body,
                 ball_body,
@@ -228,16 +226,7 @@ while True:
                 damping=30
             )
             space.add(dribble_spring_right)
-            # slide_limit = pymunk.SlideJoint(
-            #     player_body,
-            #     ball_body,
-            #     (0, 0),
-            #     (0, 0),
-            #     0,
-            #     35
-            # )
-            # space.add(slide_limit)
-            # space.add(slide_limit)
+
 
         if keys[pygame.K_d]:
             direction = diff.normalized()
@@ -246,8 +235,6 @@ while True:
                 space.remove(dribble_spring_left)
                 space.remove(dribble_spring_back)
                 space.remove(dribble_spring_right)
-            if slide_limit in space.constraints:
-                space.remove(slide_limit)
             ball_body.apply_impulse_at_local_point(direction * SHOT_STRENGTH)  # adjust power
             player_last_shot_time = time.time()
 
