@@ -21,11 +21,6 @@ ball_shape = pymunk.Circle(ball_body, 7)
 ball_shape.elasticity = 0.99
 space.add(ball_body, ball_shape)
 
-# # Wall (top border)
-# segment = pymunk.Segment(space.static_body, (50, 50), (750, 50), 5)
-# segment.elasticity = 1.0
-# space.add(segment)
-
 
 # Define wall positions
 top_wall = pymunk.Segment(space.static_body, (0, 00), (800, 00), 20)
@@ -63,23 +58,11 @@ right_goal_shape.sensor = True
 right_goal_shape.collision_type = 11
 space.add(left_goal_shape, right_goal_shape)
 
-# def goal_scored_left(arbiter, space, data):
-#     print("⚽ GOAL for RIGHT team!")
-#     return False  # No physical collision needed
-#
-# def goal_scored_right(arbiter, space, data):
-#     print("⚽ GOAL for LEFT team!")
-#     return False
-#
-# space.add_collision_handler(10, ball_shape.collision_type).begin = goal_scored_left
-# space.add_collision_handler(11, ball_shape.collision_type).begin = goal_scored_right
-
-
 
 # Player body + shape
 player_mass = 20
 player_moment = pymunk.moment_for_circle(1, 0, 15)
-player_body = pymunk.Body(player_mass, moment=9999999)
+player_body = pymunk.Body(player_mass, player_moment)
 player_body.position = (200, 300)  # Starting position
 player_body.damping = 0.1 # Value between 0 (no damping) and 1 (no slowdown)
 player_body.elasticity = 0.1
@@ -106,10 +89,7 @@ player_shape.filter = pymunk.ShapeFilter(group=1)
 ball_shape.filter = pymunk.ShapeFilter(group=1)
 
 
-
-
 space.add(player_body, player_shape)
-
 
 
 # Init
@@ -134,11 +114,11 @@ players = [
 
 ball = Ball(400, 300)
 
-DRIBBLE_DISTANCE = 20
+DRIBBLE_DISTANCE = 40
 SHOT_STRENGTH = 500
-DRIBBLE_FORCE = 50
-CONTROL_RADIUS = 20
-
+DRIBBLE_FORCE = 600
+CONTROL_RADIUS = 40
+FRONT_OFFSET_LENGTH = 30
 
 while True:
     for event in pygame.event.get():
@@ -163,40 +143,42 @@ while True:
     pygame.draw.rect(screen, (255, 0, 0), pygame.Rect(FIELD_RIGHT, FIELD_CENTER_Y - GOAL_HEIGHT // 2, 5, GOAL_HEIGHT))
 
 
-    # Before adding a new spring, remove the old one (if it exists)
-    if dribble_spring in space.constraints:
-        space.remove(dribble_spring)
+
 
     # Compute dynamic anchor in front of player
     if player_body.velocity.length > 0:
-        front_offset = player_body.velocity.normalized() * 20
+        front_offset = player_body.velocity.normalized() * FRONT_OFFSET_LENGTH
     else:
         front_offset = (0, 0)
 
 
     diff = ball_body.position - player_body.position
     if diff.length < DRIBBLE_DISTANCE:
+        if dribble_spring is not None:
+            dribble_spring.anchor_a = player_body.position + front_offset
         if now - player_last_shot_time > DRIBBLE_COOLDOWN \
                 and dribble_spring not in space.constraints \
                 and slide_limit not in space.constraints:
             dribble_spring = pymunk.DampedSpring(
-                player_body,
+                space.static_body,
                 ball_body,
-                front_offset,
+                player_body.position + front_offset,
                 (0, 0),
-                rest_length=2,
-                stiffness=150,
-                damping=50
+                rest_length=20,
+                stiffness=DRIBBLE_FORCE,
+                damping=30
             )
-            slide_limit = pymunk.SlideJoint(
-                player_body,
-                ball_body,
-                (0, 0),
-                (0, 0),
-                0,
-                20
-            )
-            space.add(dribble_spring, slide_limit)
+            space.add(dribble_spring)
+            # slide_limit = pymunk.SlideJoint(
+            #     player_body,
+            #     ball_body,
+            #     (0, 0),
+            #     (0, 0),
+            #     0,
+            #     35
+            # )
+            # space.add(slide_limit)
+            # space.add(slide_limit)
 
         if keys[pygame.K_d]:
             direction = diff.normalized()
