@@ -14,12 +14,14 @@ space.gravity = (0, 0)
 space.damping = 0.6
 
 pitch = Pitch(space)
-ball = Ball(400, 300, space)
+ball = Ball(400, 300, space, pygame.Color("yellow"))
 player1 = Player(space, 200, 300, pygame.Color("blue"))
 player2 = Player(space, 600, 300, pygame.Color("red"))
+player3 = Player(space, 400, 500, pygame.Color("black"))
 controlled_player = None
 player1.play(ball)
 player2.play(ball)
+player3.play(ball)
 
 # Init
 pygame.init()
@@ -45,6 +47,7 @@ while True:
     ball.draw(screen)
     player1.draw(screen)
     player2.draw(screen)
+    player3.draw(screen)
 
     # CONTROL
     space.step(1 / FPS)
@@ -55,6 +58,7 @@ while True:
     # SIMULATION
     player1.simulate()
     player2.simulate()
+    player3.simulate()
     ball.simulate()
 
     if keys[pygame.K_p]:
@@ -65,6 +69,9 @@ while True:
 
     if keys[pygame.K_2]:
         controlled_player = player2
+
+    if keys[pygame.K_3]:
+        controlled_player = player3
 
     if keys[pygame.K_0]:
         controlled_player = None

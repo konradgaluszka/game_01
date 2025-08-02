@@ -4,7 +4,7 @@ import pymunk
 ball_max_speed = 600
 
 class Ball:
-    def __init__(self, x, y, space) -> None:
+    def __init__(self, x, y, space, color) -> None:
         ball_mass = 0.05
         self.ball_body = pymunk.Body(1, pymunk.moment_for_circle(ball_mass, 0, 7))
         self.ball_body.position = (x, y)
@@ -13,7 +13,7 @@ class Ball:
         ball_shape.elasticity = 0.99
         space.add(self.ball_body, ball_shape)
         ball_shape.filter = pymunk.ShapeFilter(group=1)
-        self.color = (255, 255, 255)
+        self.color = color
 
 
     def draw(self, surface):
