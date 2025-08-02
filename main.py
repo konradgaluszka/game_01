@@ -16,7 +16,10 @@ space.damping = 0.6
 pitch = Pitch(space)
 ball = Ball(400, 300, space)
 player1 = Player(space, 200, 300, pygame.Color("blue"))
+player2 = Player(space, 600, 300, pygame.Color("red"))
+controlled_player = None
 player1.play(ball)
+player2.play(ball)
 
 # Init
 pygame.init()
@@ -41,6 +44,7 @@ while True:
     pitch.draw_pitch(screen)
     ball.draw(screen)
     player1.draw(screen)
+    player2.draw(screen)
 
     # CONTROL
     space.step(1 / FPS)
@@ -49,10 +53,24 @@ while True:
     now = time.time()
 
     # SIMULATION
-    player1.simulate(keys)
+    player1.simulate()
+    player2.simulate()
     ball.simulate()
 
     if keys[pygame.K_p]:
         space.debug_draw(draw_options)
+
+    if keys[pygame.K_1]:
+        controlled_player = player1
+
+    if keys[pygame.K_2]:
+        controlled_player = player2
+
+    if keys[pygame.K_0]:
+        controlled_player = None
+
+    if controlled_player is not None:
+        controlled_player.control(keys)
+
     pygame.display.flip()
     clock.tick(FPS)
