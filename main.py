@@ -255,7 +255,7 @@ while True:
         player_body.velocity = player_body.velocity.normalized() * max_speed
 
     if ball_body.velocity.length > ball_max_speed:
-        player_body.velocity = player_body.velocity.normalized() * ball_max_speed
+        ball_body.velocity = player_body.velocity.normalized() * ball_max_speed
 
     # Vector from player to ball
     diff = ball_body.position - player_body.position
