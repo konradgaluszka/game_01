@@ -26,7 +26,7 @@ class Player:
 
         self.max_speed = 200
 
-        self.DRIBBLE_DISTANCE = 40
+        self.DRIBBLE_DISTANCE = 30
         self.SPRING_LENGTH = 10
         self.SHOT_STRENGTH = 500
         self.DRIBBLE_FORCE = 500
