@@ -26,7 +26,7 @@ class Player:
 
         self.max_speed = 200
 
-        self.DRIBBLE_DISTANCE = 40
+        self.DRIBBLE_DISTANCE = 30
         self.SPRING_LENGTH = 10
         self.SHOT_STRENGTH = 500
         self.DRIBBLE_FORCE = 500
@@ -52,7 +52,7 @@ class Player:
     def play(self, ball):
         self.ball = ball
 
-    def simulate(self, keys):
+    def simulate(self):
         now = time.time()
 
         # Compute dynamic anchor in front of player
@@ -80,8 +80,15 @@ class Player:
             back_offset = (0, -self.FRONT_OFFSET_LENGTH / 2)
 
         if self.ball is not None:
-            self.simulate_ball_interaction(back_offset, front_offset, keys, left_offset, now, right_offset)
+            self.simulate_ball_interaction(back_offset, front_offset, left_offset, now, right_offset)
 
+
+        if self.player_body.velocity.length > self.max_speed:
+            self.player_body.velocity = self.player_body.velocity.normalized() * self.max_speed
+
+    def control(self, keys):
+        now = time.time()
+        diff = self.ball.ball_body.position - self.player_body.position
         if keys[pygame.K_UP]:
             self.player_body.apply_force_at_local_point((0, -self.force))
         if keys[pygame.K_DOWN]:
@@ -91,10 +98,22 @@ class Player:
         if keys[pygame.K_RIGHT]:
             self.player_body.apply_force_at_local_point((self.force, 0))
 
-        if self.player_body.velocity.length > self.max_speed:
-            self.player_body.velocity = self.player_body.velocity.normalized() * self.max_speed
+        if diff.length < self.DRIBBLE_DISTANCE:
+            if now - self.player_last_shot_time > self.DRIBBLE_COOLDOWN:
+                if keys[pygame.K_d]:
+                    direction = diff.normalized()
+                    self.remove_ball_springs()
+                    self.ball.ball_body.apply_impulse_at_local_point(direction * self.SHOT_STRENGTH)  # adjust power
+                    self.player_last_shot_time = time.time()
 
-    def simulate_ball_interaction(self, back_offset, front_offset, keys, left_offset, now, right_offset):
+    def remove_ball_springs(self):
+        if self.dribble_spring_front in self.space.constraints:
+            self.space.remove(self.dribble_spring_front)
+            self.space.remove(self.dribble_spring_left)
+            self.space.remove(self.dribble_spring_back)
+            self.space.remove(self.dribble_spring_right)
+
+    def simulate_ball_interaction(self, back_offset, front_offset, left_offset, now, right_offset):
         diff = self.ball.ball_body.position - self.player_body.position
         if diff.length < self.DRIBBLE_DISTANCE:
             if self.dribble_spring_front is not None:
@@ -147,16 +166,9 @@ class Player:
                     damping=30
                 )
                 self.space.add(self.dribble_spring_right)
+        else:
+            self.remove_ball_springs()
 
-            if keys[pygame.K_d]:
-                direction = diff.normalized()
-                if self.dribble_spring_front in self.space.constraints:
-                    self.space.remove(self.dribble_spring_front)
-                    self.space.remove(self.dribble_spring_left)
-                    self.space.remove(self.dribble_spring_back)
-                    self.space.remove(self.dribble_spring_right)
-                self.ball.ball_body.apply_impulse_at_local_point(direction * self.SHOT_STRENGTH)  # adjust power
-                self.player_last_shot_time = time.time()
 
     def draw(self, surface):
         pygame.draw.circle(surface, self.color, (int(self.player_body.position.x), int(self.player_body.position.y)), self.radius)
