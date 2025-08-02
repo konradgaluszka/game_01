@@ -99,8 +99,7 @@ class Player:
             self.player_body.apply_force_at_local_point((self.force, 0))
 
         if diff.length < self.DRIBBLE_DISTANCE:
-            if now - self.player_last_shot_time > self.DRIBBLE_COOLDOWN \
-                    and self.dribble_spring_front not in self.space.constraints:
+            if now - self.player_last_shot_time > self.DRIBBLE_COOLDOWN:
                 if keys[pygame.K_d]:
                     direction = diff.normalized()
                     if self.dribble_spring_front in self.space.constraints:
