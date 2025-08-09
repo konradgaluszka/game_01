@@ -27,7 +27,6 @@ class Match:
     def _reset_positions_only(self):
         for resettable_object in self.resettable_objects:
             if hasattr(resettable_object, "reset") and callable(getattr(resettable_object, "reset")):
-                print(f"resettting")
                 resettable_object.reset()
             else:
                 print(f"got object that's not resettable!")
