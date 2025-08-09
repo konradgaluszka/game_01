@@ -7,6 +7,7 @@ class Player:
     def __init__(self, space, x, y, color):
         self.space = space
         self.pos = pygame.Vector2(x, y)
+        self.initial_pos = pygame.Vector2(x, y)
         self.color = color
         self.radius = 15
         # Player body + shape
@@ -172,3 +173,9 @@ class Player:
 
     def draw(self, surface):
         pygame.draw.circle(surface, self.color, (int(self.player_body.position.x), int(self.player_body.position.y)), self.radius)
+
+
+    def reset(self):
+        self.player_body.position = (self.initial_pos.x, self.initial_pos.y)
+        self.player_body.velocity = (0, 0)
+        self.remove_ball_springs()

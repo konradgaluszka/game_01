@@ -30,8 +30,8 @@ class Pitch:
         self.FIELD_CENTER_Y = (self.FIELD_TOP + self.FIELD_BOTTOM) // 2
 
 
-        self.goal_left = Goal(space = space, position = (52, 300))
-        self.goal_right = Goal(space = space, position = (778, 300))
+        self.goal_left = Goal(space = space, position = (52, 300), orientation="right")
+        self.goal_right = Goal(space = space, position = (748, 300), orientation="left")
 
     def draw_pitch(self, surface):
         GREEN = (34, 139, 34)
@@ -52,30 +52,38 @@ class Pitch:
         pygame.draw.circle(surface, WHITE, (400, 300), 60, 3)
 
 
+import pygame
+import pymunk
+from pymunk import Vec2d
+import math
+
 class Goal:
-    def __init__(self, space, position, angle_degrees=0.0, width=30, height=120, post_thickness=5, collision_type=10, name="goal"):
+    def __init__(self, space, position, orientation="right", width=30, height=120, post_thickness=5, collision_type=10, name="goal"):
         self.GOAL_COLOR = pygame.Color("grey")
         self.space = space
-        self.position = position
-        self.angle = math.radians(angle_degrees)
+        self.position = Vec2d(position[0], position[1])
         self.width = width
         self.height = height
         self.name = name
-
         self.collision_type = collision_type
-        self.goal_scored = False
+        self.score = False
+        self.post_thickness = post_thickness
 
-        # Rotation matrix
-        self.direction = Vec2d(1, 0).rotated(self.angle)
+        if orientation not in ("left", "right"):
+            raise ValueError("Orientation must be 'left' or 'right'")
+        self.orientation = orientation
+
+        # Set direction and perpendicular vectors based on orientation
+        if orientation == "right":
+            self.direction = Vec2d(1, 0)
+        else:  # "left"
+            self.direction = Vec2d(-1, 0)
         self.perp = self.direction.perpendicular()
 
-        # Compute corners and posts
-        self.post_thickness = post_thickness
         self._create_posts(post_thickness)
         self._create_sensor_area()
 
     def _create_posts(self, thickness):
-        # Left and right post positions
         top_offset = self.perp.normalized() * (self.height / 2)
 
         post1_start = self.position + top_offset
@@ -94,7 +102,6 @@ class Goal:
         self.space.add(self.post1, self.post2)
 
     def _create_sensor_area(self):
-        # Sensor rectangle (goal mouth area)
         top = self.position + self.perp.normalized() * (self.height / 2)
         bottom = self.position - self.perp.normalized() * (self.height / 2)
         back = -self.direction.normalized() * self.width
@@ -110,25 +117,24 @@ class Goal:
 
         self.space.add(self.goal_shape)
 
-    def setup_collision_handler(self, ball_collision_type):
-        def _goal_scored(arbiter, space, data):
-            self.goal_scored = True
-            print(f"⚽ Goal scored in {self.name}!")
-            return False  # Do not affect physics
 
-        handler = self.space.add_collision_handler(ball_collision_type, self.collision_type)
-        handler.begin = _goal_scored
+    def is_ball_inside_goal(self, ball_pos):
 
-    def reset(self):
-        self.goal_scored = False
+        half_height = self.height / 2
+        half_width = self.width / 2
+
+        # Check if within height and depth bounds
+        within_height = self.position.y - half_height <= ball_pos.y <= self.position.y + half_height
+        within_depth = self.position.x - half_width <= ball_pos.x <= self.position.x
+
+        return within_height and within_depth
+
 
     def draw(self, surface):
-        # Draw goal posts
         for post in [self.post1, self.post2]:
             start = int(post.a.x), int(post.a.y)
             end = int(post.b.x), int(post.b.y)
             pygame.draw.line(surface, self.GOAL_COLOR, start, end, int(self.post_thickness))
 
-        # Draw goal sensor area (mouth of the goal)
         points = [(int(p.x), int(p.y)) for p in self.goal_shape.get_vertices()]
         pygame.draw.polygon(surface, self.GOAL_COLOR, points, width=1)

@@ -4,6 +4,7 @@ import pymunk.pygame_util
 from player.ball import Ball
 from player.player import Player
 from stadium.pitch import Pitch
+from game.match import Match
 import time
 
 pygame.font.init()
@@ -22,6 +23,10 @@ controlled_player = None
 player1.play(ball)
 player2.play(ball)
 player3.play(ball)
+all_players = [player1, player2, player3]
+match = Match(pitch.goal_left.is_ball_inside_goal, pitch.goal_right.is_ball_inside_goal, ball,
+              resettable_objects=[ball] + all_players)
+
 
 # Init
 pygame.init()
@@ -60,6 +65,8 @@ while True:
     player2.simulate()
     player3.simulate()
     ball.simulate()
+    match.update(keys)
+    print
 
     if keys[pygame.K_p]:
         space.debug_draw(draw_options)
@@ -78,6 +85,8 @@ while True:
 
     if controlled_player is not None:
         controlled_player.control(keys)
+
+    match.draw(screen)
 
     pygame.display.flip()
     clock.tick(FPS)
