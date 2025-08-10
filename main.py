@@ -1,11 +1,15 @@
 import pygame
 import sys
 import pymunk.pygame_util
+
+from common.Vector import Vector
 from player.ball import Ball
-from player.player import Player
+from player.team import Team, TeamAreaDimensions
 from stadium.pitch import Pitch
 from game.match import Match
 import time
+
+WIDTH, HEIGHT = 800, 600
 
 pygame.font.init()
 font = pygame.font.SysFont("Arial", 16)
@@ -16,21 +20,17 @@ space.damping = 0.6
 
 pitch = Pitch(space)
 ball = Ball(400, 300, space, pygame.Color("yellow"))
-player1 = Player(space, 200, 300, pygame.Color("blue"))
-player2 = Player(space, 600, 300, pygame.Color("red"))
-player3 = Player(space, 400, 500, pygame.Color("black"))
-controlled_player = None
-player1.play(ball)
-player2.play(ball)
-player3.play(ball)
-all_players = [player1, player2, player3]
+team_1 = Team(side="left", team_area_dimensions=TeamAreaDimensions(top_left=Vector(0, 0), bottom_right=Vector(WIDTH/2, HEIGHT)), space=space, color="red", ball=ball)
+team_2 = Team(side="right", team_area_dimensions=TeamAreaDimensions(top_left=Vector(WIDTH/2, 0), bottom_right=Vector(WIDTH, HEIGHT)), space=space, color="blue", ball=ball)
+all_players = team_1.players() + team_2.players()
+controlled_player = all_players[0]
 match = Match(pitch.goal_left.is_ball_inside_goal, pitch.goal_right.is_ball_inside_goal, ball,
-              resettable_objects=[ball] + all_players)
+              resettable_objects=[ball, team_1, team_2])
 
 
 # Init
 pygame.init()
-WIDTH, HEIGHT = 800, 600
+
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("5-a-side Football")
 
@@ -47,12 +47,15 @@ while True:
             pygame.quit()
             sys.exit()
 
+        if event.type == pygame.KEYDOWN:
+            if pygame.K_0 <= event.key <= pygame.K_9:
+                # Convert key to number (0-9)
+                active_player_index = event.key - pygame.K_0
+                controlled_player = all_players[active_player_index]
+
     # DRAWING
     pitch.draw_pitch(screen)
     ball.draw(screen)
-    player1.draw(screen)
-    player2.draw(screen)
-    player3.draw(screen)
 
     # CONTROL
     space.step(1 / FPS)
@@ -61,32 +64,19 @@ while True:
     now = time.time()
 
     # SIMULATION
-    player1.simulate()
-    player2.simulate()
-    player3.simulate()
+    team_1.simulate()
+    team_2.simulate()
     ball.simulate()
     match.update(keys)
-    print
 
     if keys[pygame.K_p]:
         space.debug_draw(draw_options)
 
-    if keys[pygame.K_1]:
-        controlled_player = player1
-
-    if keys[pygame.K_2]:
-        controlled_player = player2
-
-    if keys[pygame.K_3]:
-        controlled_player = player3
-
-    if keys[pygame.K_0]:
-        controlled_player = None
-
-    if controlled_player is not None:
-        controlled_player.control(keys)
+    controlled_player.control(keys)
 
     match.draw(screen)
+    team_1.draw(screen)
+    team_2.draw(screen)
 
     pygame.display.flip()
     clock.tick(FPS)
