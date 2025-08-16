@@ -1,6 +1,10 @@
+import math
+
 import pygame
 import pymunk
 import time
+
+from pymunk import Vec2d
 
 from common.Vector import Vector
 
@@ -32,12 +36,14 @@ class Player:
         self.DRIBBLE_DISTANCE = 30
         self.SPRING_LENGTH = 10
         self.SHOT_STRENGTH = 500
+        self.MAX_PASS_STRENGTH = 300
         self.DRIBBLE_FORCE = 500
         self.CONTROL_RADIUS = 40
         self.FRONT_OFFSET_LENGTH = 50
 
         self.force = 10000.0  # Tweak this value for speed
         self.ball = None
+        self._last_velocity = Vector(0, 0)
 
         def damp_player_velocity(body, gravity, damping, dt):
             pymunk.Body.update_velocity(body, gravity, 0.96, dt)  # strong slowdown
@@ -51,6 +57,9 @@ class Player:
         player_shape.filter = pymunk.ShapeFilter(group=1)
 
         space.add(self.player_body, player_shape)
+
+    def position(self) -> Vector:
+        return Vector(self.player_body.position.x, self.player_body.position.y)
 
     def play(self, ball):
         self.ball = ball
@@ -89,9 +98,11 @@ class Player:
         if self.player_body.velocity.length > self.max_speed:
             self.player_body.velocity = self.player_body.velocity.normalized() * self.max_speed
 
-    def control(self, keys):
+        if self.player_body.velocity.length > 0:
+            self._last_velocity = Vector(self.player_body.velocity.x, self.player_body.velocity.y)
+
+    def control(self, keys, teammates_positions):
         now = time.time()
-        diff = self.ball.ball_body.position - self.player_body.position
         if keys[pygame.K_UP]:
             self.player_body.apply_force_at_local_point((0, -self.force))
         if keys[pygame.K_DOWN]:
@@ -101,13 +112,13 @@ class Player:
         if keys[pygame.K_RIGHT]:
             self.player_body.apply_force_at_local_point((self.force, 0))
 
+        diff = self.ball.ball_body.position - self.player_body.position
         if diff.length < self.DRIBBLE_DISTANCE:
             if now - self.player_last_shot_time > self.DRIBBLE_COOLDOWN:
                 if keys[pygame.K_d]:
-                    direction = diff.normalized()
-                    self.remove_ball_springs()
-                    self.ball.ball_body.apply_impulse_at_local_point(direction * self.SHOT_STRENGTH)  # adjust power
-                    self.player_last_shot_time = time.time()
+                    self._shoot(diff)
+                elif keys[pygame.K_s]:
+                    self._handover(teammates_positions=teammates_positions)
 
     def remove_ball_springs(self):
         if self.dribble_spring_front in self.space.constraints:
@@ -184,3 +195,43 @@ class Player:
         self.player_body.position = (initial_position.x, initial_position.y)
         self.player_body.velocity = (0, 0)
         self.remove_ball_springs()
+
+    def _handover(self, teammates_positions):
+        if self._last_velocity.length() <= 0:
+            return None  # undefined orientation
+
+        f = self._last_velocity.normalize()
+
+        best = None
+        best_dot = -float("inf")
+        best_dist2 = float("inf")
+
+
+        for p in teammates_positions:
+            d = p - self.position()
+            if d.length_squared() == 0:
+                continue
+            v = d.normalize()
+            dot = f.dot(v)  # cosine of angle between facing and direction to p
+
+            # pick the largest dot (smallest angle). break ties by nearest distance
+            dist2 = d.length_squared()
+            if (dot > best_dot) or (math.isclose(dot, best_dot, rel_tol=1e-9) and dist2 < best_dist2):
+                best, best_dot, best_dist2 = Vec2d(p.x, p.y), dot, dist2
+
+        if best is None:
+            return None
+
+        d = best - self.player_body.position
+
+        self.remove_ball_springs()
+        self.ball.ball_body.apply_impulse_at_local_point(d * self.MAX_PASS_STRENGTH/100)  # adjust power
+        self.player_last_shot_time = time.time()
+
+
+
+    def _shoot(self, diff):
+        direction = diff.normalized()
+        self.remove_ball_springs()
+        self.ball.ball_body.apply_impulse_at_local_point(direction * self.SHOT_STRENGTH)  # adjust power
+        self.player_last_shot_time = time.time()
