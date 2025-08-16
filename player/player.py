@@ -2,18 +2,21 @@ import pygame
 import pymunk
 import time
 
+from common.Vector import Vector
+
 
 class Player:
-    def __init__(self, space, x, y, color):
+    def __init__(self, space, position: Vector, color, number: int):
         self.space = space
-        self.pos = pygame.Vector2(x, y)
+        self.pos = pygame.Vector2(position.x, position.y)
         self.color = color
         self.radius = 15
+        self._number = number
         # Player body + shape
         player_mass = 20
         player_moment = pymunk.moment_for_circle(1, 0, 15)
         self.player_body = pymunk.Body(player_mass, player_moment)
-        self.player_body.position = (x, y)  # Starting position
+        self.player_body.position = (position.x, position.y)  # Starting position
         self.player_body.damping = 0.1  # Value between 0 (no damping) and 1 (no slowdown)
         self.player_body.elasticity = 0.1
 
@@ -172,3 +175,12 @@ class Player:
 
     def draw(self, surface):
         pygame.draw.circle(surface, self.color, (int(self.player_body.position.x), int(self.player_body.position.y)), self.radius)
+        font = pygame.font.Font(None, 24)  # default font, size 24
+        text_surface = font.render(str(self._number), True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(int(self.player_body.position.x), int(self.player_body.position.y)))
+        surface.blit(text_surface, text_rect)
+
+    def reset(self, initial_position: Vector):
+        self.player_body.position = (initial_position.x, initial_position.y)
+        self.player_body.velocity = (0, 0)
+        self.remove_ball_springs()
