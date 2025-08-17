@@ -1,12 +1,21 @@
 import pygame
 import sys
 import pymunk.pygame_util
+import os
 
 from common.Vector import Vector
 from player.ball import Ball
 from player.team import Team, TeamAreaDimensions
 from stadium.pitch import Pitch
 from game.match import Match
+# Try to import AI controller, fallback to None if dependencies not installed
+try:
+    from ai.ai_controller import AIController
+    AI_AVAILABLE = True
+except ImportError:
+    AIController = None
+    AI_AVAILABLE = False
+    print("AI dependencies not installed. Team_2 will run without AI control.")
 import time
 
 WIDTH, HEIGHT = 800, 600
@@ -26,6 +35,12 @@ all_players = team_1.players() + team_2.players()
 controlled_player = all_players[0]
 match = Match(pitch.goal_left.is_ball_inside_goal, pitch.goal_right.is_ball_inside_goal, ball,
               resettable_objects=[ball, team_1, team_2])
+
+# Initialize AI controller for team_2
+ai_controller = None
+if AI_AVAILABLE:
+    ai_model_path = "ai/models/soccer_ai_final.zip"
+    ai_controller = AIController(ai_model_path if os.path.exists(ai_model_path) else None)
 
 
 # Init
@@ -72,7 +87,12 @@ while True:
     if keys[pygame.K_p]:
         space.debug_draw(draw_options)
 
+    # Human control for team_1 player
     controlled_player.control(keys)
+    
+    # AI control for team_2
+    if ai_controller:
+        ai_controller.control_team(team_2, ball, all_players, match)
 
     match.draw(screen)
     team_1.draw(screen)

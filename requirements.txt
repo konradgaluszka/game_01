@@ -1,2 +1,6 @@
 pygame
 pymunk
+gymnasium
+stable-baselines3[extra]
+numpy
+tensorboard
