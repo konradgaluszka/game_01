@@ -32,7 +32,7 @@ ball = Ball(400, 300, space, pygame.Color("yellow"))
 team_1 = Team(side="left", team_area_dimensions=TeamAreaDimensions(top_left=Vector(0, 0), bottom_right=Vector(WIDTH/2, HEIGHT)), space=space, color="red", ball=ball)
 team_2 = Team(side="right", team_area_dimensions=TeamAreaDimensions(top_left=Vector(WIDTH/2, 0), bottom_right=Vector(WIDTH, HEIGHT)), space=space, color="blue", ball=ball)
 all_players = team_1.players() + team_2.players()
-controlled_player = all_players[0]
+controlled_team = team_1
 match = Match(pitch.goal_left.is_ball_inside_goal, pitch.goal_right.is_ball_inside_goal, ball,
               resettable_objects=[ball, team_1, team_2])
 
@@ -62,11 +62,6 @@ while True:
             pygame.quit()
             sys.exit()
 
-        if event.type == pygame.KEYDOWN:
-            if pygame.K_0 <= event.key <= pygame.K_9:
-                # Convert key to number (0-9)
-                active_player_index = event.key - pygame.K_0
-                controlled_player = all_players[active_player_index]
 
     # DRAWING
     pitch.draw_pitch(screen)
@@ -87,9 +82,8 @@ while True:
     if keys[pygame.K_p]:
         space.debug_draw(draw_options)
 
-    # Human control for team_1 player
-    controlled_player.control(keys)
-    
+    controlled_team.control(keys)
+
     # AI control for team_2
     if ai_controller:
         ai_controller.control_team(team_2, ball, all_players, match)

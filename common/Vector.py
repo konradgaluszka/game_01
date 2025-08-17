@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 
@@ -23,11 +24,18 @@ class Vector:
     def length(self) -> float:
         return math.sqrt(self.x ** 2 + self.y ** 2)
 
+
+    def length_squared(self) -> float:
+        return self.x ** 2 + self.y ** 2
+
     def normalize(self) -> "Vector":
         l = self.length()
         if l == 0:
             return Vector(0, 0)
         return Vector(self.x / l, self.y / l)
+
+    def dot(self, other: "Vector") -> float:
+        return self.x * other.x + self.y * other.y
 
     def __repr__(self) -> str:
         return f"Vector({self.x}, {self.y})"

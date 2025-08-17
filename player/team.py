@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pygame
+
 from common.Vector import Vector
 from player.ball import Ball
 from player.player import Player
@@ -20,10 +22,25 @@ class Team:
         self._color = color
         self._opening_layout = self._calculate_opening_layout()
         self._players = self._create_players()
+        self._controlled_player = self._players[0]
 
     def reset(self):
         for i in range(0, 5):
             self._players[i].reset(self._opening_layout[i])
+
+    def control(self, keys):
+        if keys[pygame.K_1]:
+            self._controlled_player = self._players[0]
+        if keys[pygame.K_2]:
+            self._controlled_player = self._players[1]
+        if keys[pygame.K_3]:
+            self._controlled_player = self._players[2]
+        if keys[pygame.K_4]:
+            self._controlled_player = self._players[3]
+        if keys[pygame.K_5]:
+            self._controlled_player = self._players[4]
+
+        self._controlled_player.control(keys, teammates_positions=[pl.position() for pl in self._players if pl != self._controlled_player])
 
     def players(self):
         return self._players
@@ -68,7 +85,7 @@ class Team:
             player.simulate()
 
     def _create_players(self):
-        players = [Player(space=self._space, position=self._opening_layout[i], color=self._color, number=i) for i in
+        players = [Player(space=self._space, position=self._opening_layout[i], color=self._color, number=i+1) for i in
                    range(5)]
         for player in players:
             player.play(self._ball)
