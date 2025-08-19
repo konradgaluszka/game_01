@@ -1,3 +1,22 @@
+"""
+Soccer Field/Pitch Implementation
+
+This module creates the soccer field with physics boundaries, visual rendering,
+and goal objects. It handles the field layout, wall physics, and field markings.
+
+**Key Components**:
+1. **Physics Boundaries**: Invisible walls around the field for ball/player collision
+2. **Visual Field**: Green field with white line markings (boundaries, center line, circle)
+3. **Goal Integration**: Manages two Goal objects for score detection
+4. **Field Constants**: Defines dimensions and positions for game layout
+
+**Field Layout**:
+- 800x600 pixel field with 50-pixel margins
+- Center line divides field in half
+- Goals positioned at x=52 (left) and x=748 (right)
+- Elastic walls prevent objects from leaving the field
+"""
+
 import pygame
 import pymunk
 
@@ -5,6 +24,24 @@ from stadium.goal import Goal
 
 
 class Pitch:
+    """
+    Soccer field with physics boundaries, visual rendering, and goal management.
+    
+    **Purpose**: Create the playing environment with realistic field physics
+    
+    **Key Features**:
+    1. **Physics Walls**: Invisible barriers around field perimeter for collision
+    2. **Field Rendering**: Green field with white soccer field markings
+    3. **Goal Management**: Two Goal objects for score detection
+    4. **Coordinate System**: Defines field dimensions and important positions
+    
+    **Field Specifications**:
+    - Total area: 800x600 pixels
+    - Playing field: 700x500 pixels (50px margins)
+    - Center at (400, 300)
+    - Goals at x=52 (left, team_2 scores) and x=748 (right, team_1 scores)
+    - Elastic walls with full bounce (elasticity = 1.0)
+    """
 
     def __init__(self, space) -> None:
         # Define wall positions

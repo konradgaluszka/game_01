@@ -1,9 +1,47 @@
+"""
+Soccer Goal Implementation with Physics and Collision Detection
+
+This module implements soccer goals with realistic physics, collision detection,
+and goal scoring mechanics. Each goal consists of posts with physics collision
+and a sensor area for detecting when the ball crosses the goal line.
+
+**Key Features**:
+1. **Physics Posts**: Solid goal posts that ball and players can collide with
+2. **Goal Detection**: Sensor area to detect ball entry for scoring
+3. **Directional Goals**: Support for left-facing and right-facing goals
+4. **Visual Rendering**: Draw goal posts and sensor area for debugging
+
+**Goal Structure**:
+- Two vertical posts forming the goal opening
+- Rectangular sensor area behind the posts
+- Orientation-aware positioning (left vs right goals)
+- Collision-enabled posts with elasticity and friction
+"""
+
 import pygame
 import pymunk
 from pymunk import Vec2d
 
 
 class Goal:
+    """
+    Soccer goal with physics posts and goal detection sensor.
+    
+    **Purpose**: Provide goal structure with collision and scoring detection
+    
+    **Key Components**:
+    1. **Goal Posts**: Two vertical pymunk segments with collision physics
+    2. **Sensor Area**: Invisible rectangular sensor behind posts for goal detection
+    3. **Orientation System**: Supports left-facing and right-facing goals
+    4. **Collision Detection**: Method to check if ball position is inside goal
+    
+    **Physics Properties**:
+    - Posts have elasticity (bouncy) and friction for realistic ball interaction
+    - Sensor area is collision-free but detects object entry
+    - Orientation determines goal opening direction (left/right)
+    
+    **Usage**: Created by Pitch class, used by Match class for goal detection
+    """
     def __init__(self, space, position, orientation="right", width=30, height=120, post_thickness=5, collision_type=10, name="goal"):
         self.GOAL_COLOR = pygame.Color("grey")
         self.space = space
@@ -68,11 +106,19 @@ class Goal:
         tolerance = 5
 
         half_height = self.height / 2
-        half_width = self.width / 2
 
-        # Check if within height and depth bounds
+        # Check if within height bounds
         within_height = self.position.y - half_height + tolerance <= ball_pos.y <= self.position.y + half_height - tolerance
-        within_depth = self.position.x - half_width + tolerance <= ball_pos.x <= self.position.x - tolerance
+        
+        # Check depth bounds based on goal orientation
+        if self.orientation == "right":
+            # Left goal (position 52, opens right) - ball must cross goal line going left
+            # Goal area is behind the goal line (x < 52)
+            within_depth = ball_pos.x <= self.position.x - tolerance
+        else:  # orientation == "left"
+            # Right goal (position 748, opens left) - ball must cross goal line going right  
+            # Goal area is behind the goal line (x > 748)
+            within_depth = ball_pos.x >= self.position.x + tolerance
 
         return within_height and within_depth
 

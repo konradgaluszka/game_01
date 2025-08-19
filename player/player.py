@@ -1,15 +1,52 @@
-import math
+"""
+Soccer Player Physics and Behavior System
 
+This module implements individual player physics, movement, ball interactions,
+and advanced soccer mechanics like dribbling, shooting, and passing.
+
+**Core Features**:
+1. **Physics Integration**: Uses pymunk for realistic movement and collisions
+2. **Ball Interaction**: Sophisticated dribbling system with spring-based ball control  
+3. **Shooting & Passing**: Direction-based kicks with power control
+4. **Movement Control**: Keyboard input handling with velocity limits
+5. **Visual Rendering**: Player drawing with jersey numbers
+
+**Technical Details**:
+- Players are circular physics bodies (radius 15) with mass and elasticity
+- Ball dribbling uses 4 spring constraints for natural ball control
+- Shooting system uses impulse-based ball physics
+- Movement forces are applied each frame based on input
+- Cooldowns prevent spam shooting/passing
+"""
+
+import math
 import pygame
 import pymunk
 import time
-
 from pymunk import Vec2d
 
 from common.Vector import Vector
 
 
 class Player:
+    """
+    Individual soccer player with physics, controls, and ball interaction.
+    
+    **Purpose**: Represent a single player with realistic soccer mechanics
+    
+    **Key Systems**:
+    1. **Physics Body**: Circular collision body with mass, velocity, damping
+    2. **Ball Control**: Spring-based dribbling system for natural ball handling
+    3. **Action System**: Shooting, passing with directional control and cooldowns
+    4. **Movement**: Force-based movement with velocity limits and damping
+    5. **Visual**: Rendering with team colors and player numbers
+    
+    **Ball Interaction**:
+    - Automatic dribbling when close to ball (< 30 units)
+    - 4-spring system (front, back, left, right) for smooth ball control
+    - Shooting releases springs and applies impulse to ball
+    - Cooldown system prevents rapid-fire actions
+    """
     def __init__(self, space, position: Vector, color, number: int):
         self.space = space
         self.pos = pygame.Vector2(position.x, position.y)
@@ -60,6 +97,16 @@ class Player:
 
     def position(self) -> Vector:
         return Vector(self.player_body.position.x, self.player_body.position.y)
+    
+    def has_ball_control(self) -> bool:
+        """
+        Check if this player currently has control of the ball based on active dribble springs.
+        
+        Returns:
+            bool: True if player has active ball control springs
+        """
+        return (self.dribble_spring_front is not None and 
+                self.dribble_spring_front in self.space.constraints)
 
     def play(self, ball):
         self.ball = ball
@@ -102,29 +149,56 @@ class Player:
             self._last_velocity = Vector(self.player_body.velocity.x, self.player_body.velocity.y)
 
     def control(self, keys, teammates_positions):
-        now = time.time()
-        if keys[pygame.K_UP]:
+        """Legacy keyboard control method - translates pygame keys to actions"""
+        # Translate keyboard input to generic actions
+        move_up = keys[pygame.K_UP]
+        move_down = keys[pygame.K_DOWN] 
+        move_left = keys[pygame.K_LEFT]
+        move_right = keys[pygame.K_RIGHT]
+        shoot = keys[pygame.K_d]
+        pass_ball = keys[pygame.K_s]
+        
+        # Use generic control method
+        self.apply_actions(move_up, move_down, move_left, move_right, shoot, pass_ball, teammates_positions)
+    
+    def apply_actions(self, move_up, move_down, move_left, move_right, shoot, pass_ball, teammates_positions):
+        """
+        Generic player control method that applies movement and actions.
+        
+        Args:
+            move_up, move_down, move_left, move_right: Boolean movement directions
+            shoot: Boolean shoot action
+            pass_ball: Boolean pass action  
+            teammates_positions: List of teammate positions for passing
+        """
+        # Apply movement forces
+        if move_up:
             self.player_body.apply_force_at_local_point((0, -self.force))
-        if keys[pygame.K_DOWN]:
+        if move_down:
             self.player_body.apply_force_at_local_point((0, self.force))
-        if keys[pygame.K_LEFT]:
+        if move_left:
             self.player_body.apply_force_at_local_point((-self.force, 0))
-        if keys[pygame.K_RIGHT]:
+        if move_right:
             self.player_body.apply_force_at_local_point((self.force, 0))
 
+        # Apply ball actions if player is close to ball
         diff = self.ball.ball_body.position - self.player_body.position
         if diff.length < self.DRIBBLE_DISTANCE:
+            now = time.time()
             if now - self.player_last_shot_time > self.DRIBBLE_COOLDOWN:
-                if keys[pygame.K_d]:
+                if shoot:
                     self._shoot(diff)
-                elif keys[pygame.K_s]:
+                elif pass_ball:
                     self._handover(teammates_positions=teammates_positions)
 
     def remove_ball_springs(self):
-        if self.dribble_spring_front in self.space.constraints:
+        if self.dribble_spring_front is not None and self.dribble_spring_front in self.space.constraints:
             self.space.remove(self.dribble_spring_front)
+        if self.dribble_spring_left is not None and self.dribble_spring_left in self.space.constraints:
             self.space.remove(self.dribble_spring_left)
+        if self.dribble_spring_back is not None and self.dribble_spring_back in self.space.constraints:
             self.space.remove(self.dribble_spring_back)
+        if self.dribble_spring_right is not None and self.dribble_spring_right in self.space.constraints:
             self.space.remove(self.dribble_spring_right)
 
     def simulate_ball_interaction(self, back_offset, front_offset, left_offset, now, right_offset):

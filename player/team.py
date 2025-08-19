@@ -1,5 +1,19 @@
-from dataclasses import dataclass
+"""
+Team Management System
 
+This module handles team creation, player organization, and team-level behaviors.
+It manages the 5 players per team, their formation, and provides the interface
+for controlling multiple players as a cohesive unit.
+
+**Key Features**:
+- Automatic player positioning in realistic soccer formations
+- Team-wide simulation and rendering
+- Player switching and control management
+- Starting position management and resets
+- Side-specific formations (left vs right team layouts)
+"""
+
+from dataclasses import dataclass
 import pygame
 
 from common.Vector import Vector
@@ -9,11 +23,34 @@ from player.player import Player
 
 @dataclass
 class TeamAreaDimensions:
-    top_left: Vector
-    bottom_right: Vector
+    """
+    Defines the rectangular area assigned to a team on the field.
+    
+    Used to calculate player starting positions and constrain team movement
+    to their half of the field during setup.
+    """
+    top_left: Vector      # Upper-left corner of team's area
+    bottom_right: Vector  # Lower-right corner of team's area
 
 
 class Team:
+    """
+    Manages a team of 5 soccer players with formation, control, and coordination.
+    
+    **Purpose**: Organize players into a cohesive team unit with proper formation
+    
+    **Key Responsibilities**:
+    1. **Formation Management**: Calculate and maintain realistic starting positions
+    2. **Player Creation**: Instantiate 5 Player objects with team properties
+    3. **Control Interface**: Handle keyboard input and distribute to active player
+    4. **Team Simulation**: Update all players each frame
+    5. **Reset Functionality**: Restore players to starting positions
+    
+    **Team Layouts**:
+    - Left team (red): Defensive formation facing right
+    - Right team (blue): Defensive formation facing left
+    - Both use 1-2-2 formation (goalkeeper, 2 defenders, 2 forwards)
+    """
     def __init__(self, side: str, team_area_dimensions: TeamAreaDimensions, space, color: str, ball: Ball) -> None:
         self._side = side
         self._team_area_dimensions = team_area_dimensions
@@ -29,6 +66,7 @@ class Team:
             self._players[i].reset(self._opening_layout[i])
 
     def control(self, keys):
+        # Manual player switching with number keys
         if keys[pygame.K_1]:
             self._controlled_player = self._players[0]
         if keys[pygame.K_2]:
@@ -39,8 +77,25 @@ class Team:
             self._controlled_player = self._players[3]
         if keys[pygame.K_5]:
             self._controlled_player = self._players[4]
+        
+        # Automatic player switching - switch to player who has ball control
+        player_with_ball = self._get_player_with_ball_control()
+        if player_with_ball is not None:
+            self._controlled_player = player_with_ball
 
         self._controlled_player.control(keys, teammates_positions=[pl.position() for pl in self._players if pl != self._controlled_player])
+    
+    def _get_player_with_ball_control(self):
+        """
+        Find which player currently has ball control based on dribble springs.
+        
+        Returns:
+            Player or None: The player with ball control, or None if no player has control
+        """
+        for player in self._players:
+            if player.has_ball_control():
+                return player
+        return None
 
     def players(self):
         return self._players
