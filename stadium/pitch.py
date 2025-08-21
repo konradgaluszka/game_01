@@ -65,8 +65,9 @@ class Pitch:
         self.FIELD_CENTER_Y = (self.FIELD_TOP + self.FIELD_BOTTOM) // 2
 
 
-        self.goal_left = Goal(space = space, position = (52, 300), orientation="right")
-        self.goal_right = Goal(space = space, position = (748, 300), orientation="left")
+        # Goals with increased depth to reach screen edges (prevent ball from entering behind)
+        self.goal_left = Goal(space = space, position = (52, 300), orientation="right", width=52)  # Extends to left edge (0)
+        self.goal_right = Goal(space = space, position = (748, 300), orientation="left", width=52)  # Extends to right edge (800)
 
     def draw_pitch(self, surface):
         GREEN = (34, 139, 34)

@@ -229,9 +229,9 @@ while True:
     # === RENDERING ===
     # Draw all game elements to the screen in correct order
     pitch.draw_pitch(screen)    # Draw field, goals, and boundaries (background)
-    ball.draw(screen)           # Draw the ball
     team_1.draw(screen)         # Draw red team players
     team_2.draw(screen)         # Draw blue team players
+    ball.draw(screen)           # Draw the ball
     match.draw(screen)          # Draw UI (score, timer)
 
     # Optional physics debug visualization (press P to toggle)

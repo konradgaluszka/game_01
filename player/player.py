@@ -1,167 +1,196 @@
 """
-Soccer Player Physics and Behavior System
+Soccer Player Coordinator System
 
-This module implements individual player physics, movement, ball interactions,
-and advanced soccer mechanics like dribbling, shooting, and passing.
+This module coordinates between specialized player systems to provide a unified
+interface for player functionality. The Player class delegates responsibilities
+to focused components following the Single Responsibility Principle.
 
-**Core Features**:
-1. **Physics Integration**: Uses pymunk for realistic movement and collisions
-2. **Ball Interaction**: Sophisticated dribbling system with spring-based ball control  
-3. **Shooting & Passing**: Direction-based kicks with power control
-4. **Movement Control**: Keyboard input handling with velocity limits
-5. **Visual Rendering**: Player drawing with jersey numbers
+**Architecture**:
+1. **PlayerPhysics**: Handles physics body and movement forces
+2. **BallController**: Manages ball interaction and dribbling springs
+3. **PlayerRenderer**: Handles visual rendering and drawing
+4. **ActionExecutor**: Executes player actions (shoot, pass, move)
+5. **PlayerController**: Manages input and action coordination
 
-**Technical Details**:
-- Players are circular physics bodies (radius 15) with mass and elasticity
-- Ball dribbling uses 4 spring constraints for natural ball control
-- Shooting system uses impulse-based ball physics
-- Movement forces are applied each frame based on input
-- Cooldowns prevent spam shooting/passing
+**Key Benefits**:
+- Clear separation of concerns
+- Easier testing and maintenance
+- Flexible component composition
+- Reduced coupling between systems
 """
 
-import math
-import pygame
-import pymunk
 import time
-from pymunk import Vec2d
+import pygame
+from typing import List, Optional
 
 from common.Vector import Vector
+from config.game_config import GameConfig
+from player.player_physics import PlayerPhysics
+from player.ball_controller import BallController
+from player.player_renderer import PlayerRenderer
+from player.action_executor import ActionExecutor
+from player.player_controller import PlayerController
 
 
 class Player:
     """
-    Individual soccer player with physics, controls, and ball interaction.
+    Unified player interface that coordinates specialized subsystems.
     
-    **Purpose**: Represent a single player with realistic soccer mechanics
+    **Single Responsibility**: Coordinate player subsystems and provide unified interface
     
-    **Key Systems**:
-    1. **Physics Body**: Circular collision body with mass, velocity, damping
-    2. **Ball Control**: Spring-based dribbling system for natural ball handling
-    3. **Action System**: Shooting, passing with directional control and cooldowns
-    4. **Movement**: Force-based movement with velocity limits and damping
-    5. **Visual**: Rendering with team colors and player numbers
+    **Architecture**: This class delegates to specialized components:
+    - PlayerPhysics: Physics body and movement
+    - BallController: Ball interaction and dribbling
+    - PlayerRenderer: Visual representation
+    - ActionExecutor: Action execution (shoot, pass, move)  
+    - PlayerController: Input handling and action coordination
     
-    **Ball Interaction**:
-    - Automatic dribbling when close to ball (< 30 units)
-    - 4-spring system (front, back, left, right) for smooth ball control
-    - Shooting releases springs and applies impulse to ball
-    - Cooldown system prevents rapid-fire actions
+    **Usage**:
+    ```python
+    player = Player(space, Vector(100, 200), "red", 5, config)
+    player.set_ball(ball)
+    
+    # For keyboard control
+    player.update_keyboard(keys, teammates)
+    
+    # For AI control
+    player.update_ai(up, down, left, right, shoot, pass_ball, teammates)
+    
+    # Each frame
+    player.simulate()
+    player.draw(surface)
+    ```
     """
-    def __init__(self, space, position: Vector, color, number: int):
+    
+    def __init__(self, space, position: Vector, color: str, number: int, 
+                 config: Optional[GameConfig] = None):
+        """
+        Initialize player with all specialized subsystems.
+        
+        Args:
+            space: pymunk physics space
+            position: Initial player position
+            color: Team color for rendering
+            number: Jersey number (1-5)
+            config: Game configuration (creates default if None)
+        """
+        self.config = config or GameConfig.create_default()
         self.space = space
-        self.pos = pygame.Vector2(position.x, position.y)
-        self.color = color
-        self.radius = 15
         self._number = number
-        # Player body + shape
-        player_mass = 20
-        player_moment = pymunk.moment_for_circle(1, 0, 15)
-        self.player_body = pymunk.Body(player_mass, player_moment)
-        self.player_body.position = (position.x, position.y)  # Starting position
-        self.player_body.damping = 0.1  # Value between 0 (no damping) and 1 (no slowdown)
-        self.player_body.elasticity = 0.1
-
-        self.player_last_shot_time = 0
-        self.DRIBBLE_COOLDOWN = 1.0
-        self.dribble_spring_front = None
-        self.dribble_spring_left = None
-        self.dribble_spring_right = None
-        self.dribble_spring_back = None
-
-        self.max_speed = 200
-
-        self.DRIBBLE_DISTANCE = 30
-        self.SPRING_LENGTH = 10
-        self.SHOT_STRENGTH = 500
-        self.MAX_PASS_STRENGTH = 300
-        self.DRIBBLE_FORCE = 500
-        self.CONTROL_RADIUS = 40
-        self.FRONT_OFFSET_LENGTH = 50
-
-        self.force = 10000.0  # Tweak this value for speed
         self.ball = None
+        
+        # Initialize specialized subsystems
+        self.physics = PlayerPhysics(space, position, self.config)
+        self.ball_controller = BallController(self.config)
+        self.renderer = PlayerRenderer(color, number, self.config)
+        self.action_executor = ActionExecutor(self.config)
+        self.controller = PlayerController(self.config)
+        
+        # Legacy compatibility properties
         self._last_velocity = Vector(0, 0)
-
-        def damp_player_velocity(body, gravity, damping, dt):
-            pymunk.Body.update_velocity(body, gravity, 0.96, dt)  # strong slowdown
-
-        self.player_body.velocity_func = damp_player_velocity
-
-        player_shape = pymunk.Circle(self.player_body, 15)
-        player_shape.elasticity = 0.7
-        player_shape.color = pygame.Color("blue")  # Only for drawing (optional)
-
-        player_shape.filter = pymunk.ShapeFilter(group=1)
-
-        space.add(self.player_body, player_shape)
+        
+    @property
+    def player_body(self):
+        """Legacy compatibility: access physics body"""
+        return self.physics.body
+        
+    @property  
+    def radius(self) -> float:
+        """Player radius for collision detection"""
+        return self.config.physics.PLAYER_RADIUS
+        
+    @property
+    def pos(self) -> pygame.Vector2:
+        """Legacy compatibility: position as pygame Vector2"""
+        position = self.physics.get_position()
+        return pygame.Vector2(position.x, position.y)
 
     def position(self) -> Vector:
-        return Vector(self.player_body.position.x, self.player_body.position.y)
+        """Get current player position"""
+        return self.physics.get_position()
     
     def has_ball_control(self) -> bool:
         """
-        Check if this player currently has control of the ball based on active dribble springs.
+        Check if this player currently has control of the ball.
         
         Returns:
-            bool: True if player has active ball control springs
+            bool: True if player has active ball control
         """
-        return (self.dribble_spring_front is not None and 
-                self.dribble_spring_front in self.space.constraints)
-
-    def play(self, ball):
+        return self.ball_controller.has_ball_control()
+    
+    def set_ball(self, ball) -> None:
+        """
+        Set the ball reference for this player.
+        
+        Args:
+            ball: Ball object for interaction
+        """
         self.ball = ball
 
-    def simulate(self):
-        now = time.time()
+    def play(self, ball):
+        """Legacy method - use set_ball() instead"""
+        self.set_ball(ball)
 
-        # Compute dynamic anchor in front of player
-        if self.player_body.velocity.length > 0:
-            front_offset = self.player_body.velocity.normalized() * self.FRONT_OFFSET_LENGTH / 2 + (0, self.FRONT_OFFSET_LENGTH / 2)
-        else:
-            front_offset = (0, self.FRONT_OFFSET_LENGTH / 2)
-
-        # Compute dynamic anchor in left of player
-        if self.player_body.velocity.length > 0:
-            left_offset = self.player_body.velocity.normalized() * self.FRONT_OFFSET_LENGTH / 2 + (self.FRONT_OFFSET_LENGTH / 2, 0)
-        else:
-            left_offset = (self.FRONT_OFFSET_LENGTH / 2, 0)
-
-        # Right
-        if self.player_body.velocity.length > 0:
-            right_offset = self.player_body.velocity.normalized() * (self.FRONT_OFFSET_LENGTH / 2) + (-self.FRONT_OFFSET_LENGTH / 2, 0)
-        else:
-            right_offset = (-self.FRONT_OFFSET_LENGTH / 2, 0)
-
-        # Back
-        if self.player_body.velocity.length > 0:
-            back_offset = self.player_body.velocity.normalized() * (self.FRONT_OFFSET_LENGTH / 2) + (0, -self.FRONT_OFFSET_LENGTH / 2)
-        else:
-            back_offset = (0, -self.FRONT_OFFSET_LENGTH / 2)
-
-        if self.ball is not None:
-            self.simulate_ball_interaction(back_offset, front_offset, left_offset, now, right_offset)
-
-
-        if self.player_body.velocity.length > self.max_speed:
-            self.player_body.velocity = self.player_body.velocity.normalized() * self.max_speed
-
-        if self.player_body.velocity.length > 0:
-            self._last_velocity = Vector(self.player_body.velocity.x, self.player_body.velocity.y)
-
-    def control(self, keys, teammates_positions):
-        """Legacy keyboard control method - translates pygame keys to actions"""
-        # Translate keyboard input to generic actions
-        move_up = keys[pygame.K_UP]
-        move_down = keys[pygame.K_DOWN] 
-        move_left = keys[pygame.K_LEFT]
-        move_right = keys[pygame.K_RIGHT]
-        shoot = keys[pygame.K_d]
-        pass_ball = keys[pygame.K_s]
+    def simulate(self) -> None:
+        """
+        Update player state each frame.
         
-        # Use generic control method
-        self.apply_actions(move_up, move_down, move_left, move_right, shoot, pass_ball, teammates_positions)
+        This method coordinates all subsystems:
+        - Updates physics (velocity limits)
+        - Updates ball control (spring management)
+        - Tracks velocity for legacy compatibility
+        """
+        current_time = time.time()
+        
+        # Update physics system
+        self.physics.update()
+        
+        # Update ball controller if ball is available
+        if self.ball is not None:
+            player_position = self.physics.get_position()
+            player_velocity = self.physics.get_velocity()
+            
+            self.ball_controller.update(
+                player_position, 
+                player_velocity, 
+                self.ball, 
+                self.space, 
+                current_time
+            )
+        
+        # Update legacy velocity tracking
+        current_velocity = self.physics.get_velocity()
+        if current_velocity.length() > 0:
+            self._last_velocity = current_velocity
+
+    def control(self, keys, teammates_positions: List[Vector]) -> None:
+        """
+        Legacy keyboard control method.
+        
+        Args:
+            keys: pygame key state (ScancodeWrapper from pygame.key.get_pressed())
+            teammates_positions: List of teammate positions
+        """
+        # Convert pygame ScancodeWrapper to dictionary format expected by controller
+        # Extract the relevant keys we need for player control
+        keys_dict = {
+            pygame.K_UP: keys[pygame.K_UP],
+            pygame.K_DOWN: keys[pygame.K_DOWN],
+            pygame.K_LEFT: keys[pygame.K_LEFT],
+            pygame.K_RIGHT: keys[pygame.K_RIGHT],
+            pygame.K_d: keys[pygame.K_d],
+            pygame.K_s: keys[pygame.K_s],
+        }
+        
+        # Get actions from controller
+        actions = self.controller.get_keyboard_actions(keys_dict, teammates_positions)
+        
+        # Execute actions
+        self._execute_actions(actions, teammates_positions)
     
-    def apply_actions(self, move_up, move_down, move_left, move_right, shoot, pass_ball, teammates_positions):
+    def apply_actions(self, move_up: bool, move_down: bool, move_left: bool, 
+                     move_right: bool, shoot: bool, pass_ball: bool, 
+                     teammates_positions: List[Vector]) -> None:
         """
         Generic player control method that applies movement and actions.
         
@@ -171,141 +200,82 @@ class Player:
             pass_ball: Boolean pass action  
             teammates_positions: List of teammate positions for passing
         """
-        # Apply movement forces
-        if move_up:
-            self.player_body.apply_force_at_local_point((0, -self.force))
-        if move_down:
-            self.player_body.apply_force_at_local_point((0, self.force))
-        if move_left:
-            self.player_body.apply_force_at_local_point((-self.force, 0))
-        if move_right:
-            self.player_body.apply_force_at_local_point((self.force, 0))
+        # Get actions from controller
+        actions = self.controller.get_ai_actions(
+            move_up, move_down, move_left, move_right, shoot, pass_ball, teammates_positions
+        )
+        
+        # Execute actions
+        self._execute_actions(actions, teammates_positions)
+    
+    def _execute_actions(self, actions, teammates_positions: List[Vector]) -> None:
+        """Execute list of player actions using action executor"""
+        if not actions:
+            return
+            
+        # Build execution context
+        context = {
+            'physics': self.physics,
+            'ball_controller': self.ball_controller,
+            'ball': self.ball,
+            'space': self.space,
+            'teammates_positions': teammates_positions,
+            'current_time': time.time()
+        }
+        
+        # Execute all actions
+        results = self.action_executor.execute_actions(actions, context)
 
-        # Apply ball actions if player is close to ball
-        diff = self.ball.ball_body.position - self.player_body.position
-        if diff.length < self.DRIBBLE_DISTANCE:
-            now = time.time()
-            if now - self.player_last_shot_time > self.DRIBBLE_COOLDOWN:
-                if shoot:
-                    self._shoot(diff)
-                elif pass_ball:
-                    self._handover(teammates_positions=teammates_positions)
+    def remove_ball_springs(self) -> None:
+        """Legacy method - ball spring removal is now handled by BallController"""
+        if self.ball_controller:
+            self.ball_controller.release_ball_control(self.space, time.time())
 
-    def remove_ball_springs(self):
-        if self.dribble_spring_front is not None and self.dribble_spring_front in self.space.constraints:
-            self.space.remove(self.dribble_spring_front)
-        if self.dribble_spring_left is not None and self.dribble_spring_left in self.space.constraints:
-            self.space.remove(self.dribble_spring_left)
-        if self.dribble_spring_back is not None and self.dribble_spring_back in self.space.constraints:
-            self.space.remove(self.dribble_spring_back)
-        if self.dribble_spring_right is not None and self.dribble_spring_right in self.space.constraints:
-            self.space.remove(self.dribble_spring_right)
+    def draw(self, surface) -> None:
+        """
+        Draw the player on the surface with animated limbs.
+        
+        Args:
+            surface: pygame surface to draw on
+        """
+        current_position = self.physics.get_position()
+        current_velocity = self.physics.get_velocity()
+        has_control = self.has_ball_control()
+        self.renderer.draw(surface, current_position, velocity=current_velocity, has_ball_control=has_control)
 
-    def simulate_ball_interaction(self, back_offset, front_offset, left_offset, now, right_offset):
-        diff = self.ball.ball_body.position - self.player_body.position
-        if diff.length < self.DRIBBLE_DISTANCE:
-            if self.dribble_spring_front is not None:
-                self.dribble_spring_front.anchor_a = self.player_body.position + front_offset
-                self.dribble_spring_left.anchor_a = self.player_body.position + left_offset
-                self.dribble_spring_back.anchor_a = self.player_body.position + back_offset
-                self.dribble_spring_right.anchor_a = self.player_body.position + right_offset
-            if now - self.player_last_shot_time > self.DRIBBLE_COOLDOWN \
-                    and self.dribble_spring_front not in self.space.constraints:
-                self.dribble_spring_front = pymunk.DampedSpring(
-                    self.space.static_body,
-                    self.ball.ball_body,
-                    self.player_body.position + front_offset,
-                    (0, 0),
-                    rest_length=self.SPRING_LENGTH,
-                    stiffness=self.DRIBBLE_FORCE,
-                    damping=30
-                )
-                self.space.add(self.dribble_spring_front)
-
-                self.dribble_spring_left = pymunk.DampedSpring(
-                    self.space.static_body,
-                    self.ball.ball_body,
-                    self.player_body.position + left_offset,
-                    (0, 0),
-                    rest_length=self.SPRING_LENGTH,
-                    stiffness=self.DRIBBLE_FORCE,
-                    damping=30
-                )
-                self.space.add(self.dribble_spring_left)
-
-                self.dribble_spring_back = pymunk.DampedSpring(
-                    self.space.static_body,
-                    self.ball.ball_body,
-                    self.player_body.position + back_offset,
-                    (0, 0),
-                    rest_length=self.SPRING_LENGTH,
-                    stiffness=self.DRIBBLE_FORCE,
-                    damping=30
-                )
-                self.space.add(self.dribble_spring_back)
-
-                self.dribble_spring_right = pymunk.DampedSpring(
-                    self.space.static_body,
-                    self.ball.ball_body,
-                    self.player_body.position + right_offset,
-                    (0, 0),
-                    rest_length=self.SPRING_LENGTH,
-                    stiffness=self.DRIBBLE_FORCE,
-                    damping=30
-                )
-                self.space.add(self.dribble_spring_right)
-        else:
-            self.remove_ball_springs()
-
-
-    def draw(self, surface):
-        pygame.draw.circle(surface, self.color, (int(self.player_body.position.x), int(self.player_body.position.y)), self.radius)
-        font = pygame.font.Font(None, 24)  # default font, size 24
-        text_surface = font.render(str(self._number), True, (255, 255, 255))
-        text_rect = text_surface.get_rect(center=(int(self.player_body.position.x), int(self.player_body.position.y)))
-        surface.blit(text_surface, text_rect)
-
-    def reset(self, initial_position: Vector):
-        self.player_body.position = (initial_position.x, initial_position.y)
-        self.player_body.velocity = (0, 0)
-        self.remove_ball_springs()
-
+    def reset(self, initial_position: Vector) -> None:
+        """
+        Reset player to initial state.
+        
+        Args:
+            initial_position: Position to reset to
+        """
+        # Reset all subsystems
+        self.physics.reset(initial_position)
+        self.ball_controller.reset(self.space)
+        
+        # Reset legacy state
+        self._last_velocity = Vector(0, 0)
+    
+    def cleanup(self) -> None:
+        """Clean up player resources (for removal from game)"""
+        self.physics.cleanup()
+        self.ball_controller.cleanup(self.space)
+        
+    # Legacy compatibility methods (deprecated - use specific subsystem methods)
+    
     def _handover(self, teammates_positions):
-        if self._last_velocity.length() <= 0:
-            return None  # undefined orientation
-
-        f = self._last_velocity.normalize()
-
-        best = None
-        best_dot = -float("inf")
-        best_dist2 = float("inf")
-
-
-        for p in teammates_positions:
-            d = p - self.position()
-            if d.length_squared() == 0:
-                continue
-            v = d.normalize()
-            dot = f.dot(v)  # cosine of angle between facing and direction to p
-
-            # pick the largest dot (smallest angle). break ties by nearest distance
-            dist2 = d.length_squared()
-            if (dot > best_dot) or (math.isclose(dot, best_dot, rel_tol=1e-9) and dist2 < best_dist2):
-                best, best_dot, best_dist2 = Vec2d(p.x, p.y), dot, dist2
-
-        if best is None:
-            return None
-
-        d = best - self.player_body.position
-
-        self.remove_ball_springs()
-        self.ball.ball_body.apply_impulse_at_local_point(d * self.MAX_PASS_STRENGTH/100)  # adjust power
-        self.player_last_shot_time = time.time()
-
-
+        """
+        Legacy passing method - now handled by ActionExecutor.
+        This method is kept for backward compatibility but should not be used directly.
+        """
+        # This functionality is now in PassActionHandler within ActionExecutor
+        pass
 
     def _shoot(self, diff):
-        direction = diff.normalized()
-        self.remove_ball_springs()
-        self.ball.ball_body.apply_impulse_at_local_point(direction * self.SHOT_STRENGTH)  # adjust power
-        self.player_last_shot_time = time.time()
+        """
+        Legacy shooting method - now handled by ActionExecutor. 
+        This method is kept for backward compatibility but should not be used directly.
+        """
+        # This functionality is now in ShootActionHandler within ActionExecutor
+        pass

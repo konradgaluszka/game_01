@@ -60,30 +60,33 @@ class Team:
         self._opening_layout = self._calculate_opening_layout()
         self._players = self._create_players()
         self._controlled_player = self._players[0]
+        
+        # Initialize visual selection indicators
+        self._update_player_selection_visuals()
 
     def reset(self):
         for i in range(0, 5):
             self._players[i].reset(self._opening_layout[i])
 
     def control(self, keys):
-        # Manual player switching with number keys
-        if keys[pygame.K_1]:
-            self._controlled_player = self._players[0]
-        if keys[pygame.K_2]:
-            self._controlled_player = self._players[1]
-        if keys[pygame.K_3]:
-            self._controlled_player = self._players[2]
-        if keys[pygame.K_4]:
-            self._controlled_player = self._players[3]
-        if keys[pygame.K_5]:
-            self._controlled_player = self._players[4]
+        # Manual player switching with number keys (fix key detection)
+        for i, key in enumerate([pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5]):
+            if keys[key]:
+                old_controlled = self._controlled_player
+                self._controlled_player = self._players[i]
+                # Update visual selection state
+                if old_controlled != self._controlled_player:
+                    self._update_player_selection_visuals()
         
         # Automatic player switching - switch to player who has ball control
         player_with_ball = self._get_player_with_ball_control()
-        if player_with_ball is not None:
+        if player_with_ball is not None and player_with_ball != self._controlled_player:
             self._controlled_player = player_with_ball
+            self._update_player_selection_visuals()
 
-        self._controlled_player.control(keys, teammates_positions=[pl.position() for pl in self._players if pl != self._controlled_player])
+        # Control the selected player with all teammates positions
+        teammates_positions = [pl.position() for pl in self._players if pl != self._controlled_player]
+        self._controlled_player.control(keys, teammates_positions)
     
     def _get_player_with_ball_control(self):
         """
@@ -96,6 +99,26 @@ class Team:
             if player.has_ball_control():
                 return player
         return None
+    
+    def _update_player_selection_visuals(self):
+        """
+        Update visual indicators for which player is currently selected.
+        """
+        # Clear all player selection states
+        for player in self._players:
+            if hasattr(player, 'renderer') and player.renderer:
+                player.renderer.set_selected(False)
+                player.renderer.set_highlighted(False)
+        
+        # Set current controlled player as selected
+        if self._controlled_player and hasattr(self._controlled_player, 'renderer'):
+            self._controlled_player.renderer.set_selected(True)
+            
+        # Highlight player with ball control if different from controlled player
+        player_with_ball = self._get_player_with_ball_control()
+        if (player_with_ball and player_with_ball != self._controlled_player and 
+            hasattr(player_with_ball, 'renderer')):
+            player_with_ball.renderer.set_highlighted(True)
 
     def players(self):
         return self._players
@@ -138,6 +161,9 @@ class Team:
     def simulate(self):
         for player in self._players:
             player.simulate()
+        
+        # Update visual selection indicators each frame in case ball control changes
+        self._update_player_selection_visuals()
 
     def _create_players(self):
         players = [Player(space=self._space, position=self._opening_layout[i], color=self._color, number=i+1) for i in

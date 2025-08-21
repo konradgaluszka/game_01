@@ -89,6 +89,15 @@ class SoccerEnv(gym.Env):
         self.opponent_model = None
         self._load_opponent_model()
         
+        # OpponentAI settings
+        try:
+            from ai.opponent_ai import OpponentAI
+            self.opponent_ai = OpponentAI(team_side="left", field_width=self.WIDTH, field_height=self.HEIGHT)
+            print("OpponentAI loaded for team_1")
+        except ImportError:
+            self.opponent_ai = None
+            print("OpponentAI not available, using fallback opponent")
+        
         # === ACTION SPACE DEFINITION ===
         # Each of 5 team_2 players can perform one of 7 actions per timestep:
         # 0 = do nothing, 1 = move up, 2 = move down, 3 = move left, 4 = move right
@@ -349,8 +358,11 @@ class SoccerEnv(gym.Env):
         # Control team_1 based on mode
         if self.self_play:
             self._self_play_opponent_ai()
+        elif self.opponent_ai is not None:
+            # Use new OpponentAI for team_1
+            self._opponent_ai_control()
         else:
-            # Phase-based opponent AI for team_1
+            # Phase-based opponent AI for team_1 (fallback)
             self._phase_based_opponent_ai()
         
         # Update physics
@@ -1304,6 +1316,22 @@ class SoccerEnv(gym.Env):
         return total_distance / count if count > 0 else 0
     
         
+    def _opponent_ai_control(self):
+        """Control team_1 using the new OpponentAI system"""
+        if self.opponent_ai is not None:
+            try:
+                # Use OpponentAI to control team_1 players
+                team_1_players = self.team_1.players()
+                team_2_players = self.team_2.players()
+                
+                # OpponentAI controls team_1 against team_2
+                self.opponent_ai.control_team(team_1_players, self.ball, team_2_players)
+                
+            except Exception as e:
+                print(f"Error in OpponentAI control: {e}")
+                # Fall back to simple opponent AI
+                self._phase_based_opponent_ai()
+
     def render(self):
         """Render the environment"""
         if self.render_mode == "human":
