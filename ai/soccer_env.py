@@ -394,137 +394,47 @@ class SoccerEnv(gym.Env):
         return obs, reward, terminated, truncated, {}
         
     def _apply_actions(self, actions):
-        """Apply actions to team_2 players including shooting and passing"""
+        """Apply actions to team_2 players using Player.apply_actions interface"""
         team_2_players = self.team_2.players()
-        ball_pos = self.ball.ball_body.position
         
         for i, action in enumerate(actions):
             if i >= len(team_2_players):
                 break
                 
             player = team_2_players[i]
-            player_pos = player.player_body.position
             
-            # Action mapping: 0=nothing, 1=up, 2=down, 3=left, 4=right, 5=shoot, 6=pass
-            if action == 1:  # Up
-                player.player_body.apply_force_at_local_point((0, -player.force))
-            elif action == 2:  # Down
-                player.player_body.apply_force_at_local_point((0, player.force))
-            elif action == 3:  # Left
-                player.player_body.apply_force_at_local_point((-player.force, 0))
-            elif action == 4:  # Right
-                player.player_body.apply_force_at_local_point((player.force, 0))
-            elif action == 5:  # Shoot toward goal
-                self._perform_shoot(player, ball_pos, player_pos)
-            elif action == 6:  # Pass to teammate
-                self._perform_pass(player, ball_pos, player_pos, team_2_players, i)
+            # Get teammate positions for passing
+            teammates_positions = [p.position() for j, p in enumerate(team_2_players) if j != i]
+            
+            # Map actions to movement + action booleans (same as AI controller)
+            move_up = action == 1
+            move_down = action == 2
+            move_left = action == 3
+            move_right = action == 4
+            shoot = action == 5
+            pass_ball = action == 6
+            
+            # Use Player's action system instead of direct physics manipulation
+            player.apply_actions(
+                move_up=move_up,
+                move_down=move_down,
+                move_left=move_left,
+                move_right=move_right,
+                shoot=shoot,
+                pass_ball=pass_ball,
+                teammates_positions=teammates_positions
+            )
+            # Note: action 0 = do nothing (all booleans False)
     
-    def _perform_shoot(self, player, ball_pos, player_pos):
-        """
-        Perform shooting action toward the goal if player has ball control.
-        
-        **Ball Control Requirements**:
-        - Player must be within DRIBBLE_DISTANCE of ball
-        - Minimum cooldown between actions
-        
-        **Shooting Logic**:
-        - Aim toward left goal (opponent goal for team_2)
-        - Apply impulse to ball in goal direction
-        - Remove ball control springs to release ball
-        """
-        ball_distance = (ball_pos - player_pos).length
-        
-        # Check if player has ball control
-        if ball_distance < player.DRIBBLE_DISTANCE:
-            import time
-            now = time.time()
-            
-            # Check cooldown to prevent spam shooting
-            if now - player.player_last_shot_time > player.DRIBBLE_COOLDOWN:
-                # Calculate direction toward left goal (team_2's target)
-                goal_pos = pymunk.Vec2d(50, 300)  # Left goal center
-                shoot_direction = (goal_pos - ball_pos).normalized()
-                
-                # Add some aiming toward goal opening
-                goal_opening_y = 300  # Center of goal
-                if abs(ball_pos.y - goal_opening_y) > 50:  # If not aligned with goal
-                    # Adjust direction slightly toward goal center
-                    goal_center_dir = (pymunk.Vec2d(50, goal_opening_y) - ball_pos).normalized()
-                    shoot_direction = (shoot_direction + goal_center_dir * 0.3).normalized()
-                
-                # Remove ball control springs
-                player.remove_ball_springs()
-                
-                # Apply shooting impulse to ball
-                shot_power = player.SHOT_STRENGTH * 1.5  # Stronger shots for goals
-                self.ball.ball_body.apply_impulse_at_local_point(
-                    (shoot_direction.x * shot_power, shoot_direction.y * shot_power)
-                )
-                
-                # Update cooldown
-                player.player_last_shot_time = time.time()
+    # Note: _perform_shoot method removed - now handled by Player.apply_actions()
+    # This follows proper separation of concerns:
+    # - Training environment provides high-level actions (shoot=True)
+    # - Player system handles all physics, targeting, cooldowns, etc.
     
-    def _perform_pass(self, player, ball_pos, player_pos, team_2_players, player_index):
-        """
-        Perform passing action to nearest teammate if player has ball control.
-        
-        **Pass Selection Logic**:
-        - Find nearest teammate within reasonable distance
-        - Prefer teammates closer to goal
-        - Avoid passing to teammates under pressure from opponents
-        """
-        ball_distance = (ball_pos - player_pos).length
-        
-        # Check if player has ball control
-        if ball_distance < player.DRIBBLE_DISTANCE:
-            import time
-            now = time.time()
-            
-            # Check cooldown
-            if now - player.player_last_shot_time > player.DRIBBLE_COOLDOWN:
-                # Find best teammate to pass to
-                best_teammate = None
-                best_score = -1
-                
-                for j, teammate in enumerate(team_2_players):
-                    if j == player_index:  # Skip self
-                        continue
-                    
-                    teammate_pos = teammate.player_body.position
-                    pass_distance = (teammate_pos - ball_pos).length
-                    
-                    # Only consider reasonable pass distances
-                    if pass_distance > 200 or pass_distance < 50:
-                        continue
-                    
-                    # Calculate pass score based on:
-                    # 1. Distance to goal (prefer forward passes)
-                    # 2. Distance from passer (prefer closer teammates)
-                    # 3. Avoid teammates too close to opponents
-                    goal_distance = abs(teammate_pos.x - 50)  # Distance to left goal
-                    goal_progress = (800 - goal_distance) / 800  # 0 to 1, higher = closer to goal
-                    
-                    pass_score = goal_progress - (pass_distance / 300)  # Prefer closer, forward teammates
-                    
-                    if pass_score > best_score:
-                        best_score = pass_score
-                        best_teammate = teammate
-                
-                # Execute pass if good teammate found
-                if best_teammate is not None:
-                    pass_direction = (best_teammate.player_body.position - ball_pos).normalized()
-                    
-                    # Remove ball control springs
-                    player.remove_ball_springs()
-                    
-                    # Apply pass impulse (lighter than shooting)
-                    pass_power = player.SHOT_STRENGTH * 0.7
-                    self.ball.ball_body.apply_impulse_at_local_point(
-                        (pass_direction.x * pass_power, pass_direction.y * pass_power)
-                    )
-                    
-                    # Update cooldown
-                    player.player_last_shot_time = time.time()
+    # Note: _perform_pass method removed - now handled by Player.apply_actions()
+    # This follows proper separation of concerns:
+    # - Training environment provides high-level actions (pass=True)
+    # - Player system handles all physics, targeting, teammate selection, etc.
     
     def _self_play_opponent_ai(self):
         """Control team_1 using self-play AI model"""
@@ -549,30 +459,37 @@ class SoccerEnv(gym.Env):
             self._phase_based_opponent_ai()
     
     def _apply_opponent_actions(self, actions):
-        """Apply actions to team_1 players (opponent in self-play)"""
+        """Apply actions to team_1 players (opponent in self-play) using Player.apply_actions interface"""
         team_1_players = self.team_1.players()
-        ball_pos = self.ball.ball_body.position
         
         for i, action in enumerate(actions):
             if i >= len(team_1_players):
                 break
                 
             player = team_1_players[i]
-            player_pos = player.player_body.position
             
-            # Action mapping: 0=nothing, 1=up, 2=down, 3=left, 4=right, 5=shoot, 6=pass
-            if action == 1:  # Up
-                player.player_body.apply_force_at_local_point((0, -player.force))
-            elif action == 2:  # Down
-                player.player_body.apply_force_at_local_point((0, player.force))
-            elif action == 3:  # Left
-                player.player_body.apply_force_at_local_point((-player.force, 0))
-            elif action == 4:  # Right
-                player.player_body.apply_force_at_local_point((player.force, 0))
-            elif action == 5:  # Shoot toward goal
-                self._perform_opponent_shoot(player, ball_pos, player_pos)
-            elif action == 6:  # Pass to teammate
-                self._perform_opponent_pass(player, ball_pos, player_pos, team_1_players, i)
+            # Get teammate positions for passing
+            teammates_positions = [p.position() for j, p in enumerate(team_1_players) if j != i]
+            
+            # Map actions to movement + action booleans (same as team_2)
+            move_up = action == 1
+            move_down = action == 2
+            move_left = action == 3
+            move_right = action == 4
+            shoot = action == 5
+            pass_ball = action == 6
+            
+            # Use Player's action system instead of direct physics manipulation
+            player.apply_actions(
+                move_up=move_up,
+                move_down=move_down,
+                move_left=move_left,
+                move_right=move_right,
+                shoot=shoot,
+                pass_ball=pass_ball,
+                teammates_positions=teammates_positions
+            )
+            # Note: action 0 = do nothing (all booleans False)
     
     def _perform_opponent_shoot(self, player, ball_pos, player_pos):
         """Perform shooting action for opponent AI player (team_1)"""
