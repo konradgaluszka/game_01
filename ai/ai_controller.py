@@ -25,6 +25,7 @@ from stable_baselines3 import PPO
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.Vector import Vector
+from ai.observation_builder import ObservationBuilder
 
 
 class AIController:
@@ -51,6 +52,9 @@ class AIController:
         self.model_path = model_path
         self.is_loaded = False
         
+        # Initialize CTDE observation builder for compatibility with trained models
+        self.observation_builder = ObservationBuilder(field_width=800, field_height=600)
+        
         if model_path and os.path.exists(model_path):
             self.load_model(model_path)
     
@@ -68,7 +72,32 @@ class AIController:
             return False
     
     def get_observation(self, ball, all_players, match, width=800, height=600) -> np.ndarray:
-        """Convert game state to observation format expected by the model"""
+        """Convert game state to CTDE observation format expected by trained models"""
+        
+        # Split players into teams
+        team_2_players = all_players[5:]  # Last 5 players are team_2
+        team_1_players = all_players[:5]  # First 5 players are team_1
+        
+        # Use CTDE observation builder for compatibility with trained models
+        try:
+            # Try CTDE format first (for models trained with CTDE)
+            obs = self.observation_builder.build_observation(
+                ball=ball,
+                team_2_players=team_2_players,
+                team_1_players=team_1_players,
+                match=match,
+                steps=0,  # Not applicable for real-time play
+                max_steps=500  # Default episode length
+            )
+            return obs
+            
+        except Exception as e:
+            print(f"AI Controller: CTDE observation failed ({e}), falling back to legacy format")
+            # Fallback to legacy observation format
+            return self._get_legacy_observation(ball, all_players, match, width, height)
+    
+    def _get_legacy_observation(self, ball, all_players, match, width=800, height=600) -> np.ndarray:
+        """Legacy observation format for backward compatibility"""
         obs = []
         
         # Get ball state using public interface
@@ -143,6 +172,7 @@ class AIController:
             float(0.5)  # Time progress (placeholder)
         ])
         
+        print(f"AI Controller: Using legacy observation format ({len(obs)} dims)")
         return np.array(obs, dtype=np.float32)
     
     def get_actions(self, ball, all_players, match) -> List[int]:

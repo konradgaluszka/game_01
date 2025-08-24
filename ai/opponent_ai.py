@@ -99,9 +99,22 @@ class OpponentAI:
         self.shot_distance_threshold = 150.0  # Distance to attempt shots
         self.pressure_distance = 100.0       # Distance to pressure opponents
         
+        # Enhanced ball stealing parameters - Very aggressive settings
+        self.coordinated_press_distance = 250.0  # Distance to trigger coordinated pressing (very wide)
+        self.support_distance = 150.0            # Distance for support positioning
+        self.intercept_distance = 180.0          # Distance to position for interceptions
+        self.press_commitment_threshold = 1      # Min players to commit to pressing
+        self.max_press_participants = 3         # Maximum players in coordinated press
+        
         # Cooldown timers (to prevent spam actions)
         self.player_action_cooldowns = [0.0] * 5  # Last action time for each player
         self.action_cooldown_time = 0.5  # Seconds between actions
+        
+        # Ball stealing state tracking
+        self.ball_steal_mode = False            # Whether team is in coordinated steal mode
+        self.ball_steal_target = None           # Current ball carrier being pressed
+        self.ball_steal_participants = []       # Players participating in ball steal
+        self.last_ball_steal_time = 0.0        # Time of last ball steal attempt
         
     def control_team(self, team_players: List, ball, opponent_players: List):
         """
@@ -116,6 +129,9 @@ class OpponentAI:
         # Determine game state
         game_state = self._analyze_game_state(team_players, opponent_players, ball)
         ball_controller = self._find_ball_controller(team_players + opponent_players, ball)
+        
+        # Update ball stealing coordination
+        self._update_ball_stealing_coordination(team_players, opponent_players, ball, ball_controller, current_time)
         
         # Assign roles to players based on their position index
         roles = [
@@ -272,6 +288,16 @@ class OpponentAI:
         defender_pos = defender.player_body.position
         ball_distance = (ball_pos - defender_pos).length
         
+        # Check if should participate in coordinated ball stealing
+        if self._should_participate_in_ball_steal(player_index, PlayerRole.DEFENDER):
+            return self._get_coordinated_steal_actions(defender, player_index, ball_controller, 
+                                                     ball, team_players, actions)
+        
+        # If we have ball control and just stole it, use enhanced attack transition
+        if (ball_controller == defender and game_state == GameState.ATTACK and 
+            current_time - self.last_ball_steal_time < 2.0):  # Within 2 seconds of steal
+            return self._get_post_steal_attack_actions(defender, PlayerRole.DEFENDER, ball, actions)
+        
         if game_state == GameState.ATTACK and ball_controller in team_players:
             if ball_controller == defender:
                 # Defender has ball - move forward to create attack
@@ -283,14 +309,22 @@ class OpponentAI:
                 target_y = ball_pos.y + ((defender_pos.y - ball_pos.y) * 0.5)
             
         elif game_state == GameState.DEFENSE and ball_controller:
-            # Opponent has ball - pressure or maintain position
-            if ball_distance < self.pressure_distance:
-                # Close enough to pressure - move toward ball carrier
-                target_x = ball_controller.player_body.position.x
-                target_y = ball_controller.player_body.position.y
+            # Opponent has ball - MORE AGGRESSIVE pressure
+            ball_controller_pos = ball_controller.player_body.position
+            
+            # More aggressive pressure distance and behavior
+            if ball_distance < self.pressure_distance * 1.5:  # Increased pressure range
+                # Move aggressively toward ball carrier
+                target_x = ball_controller_pos.x
+                target_y = ball_controller_pos.y
+            elif ball_distance < self.coordinated_press_distance:
+                # Even if not close, move to support the press
+                # Position to cut off passing lanes or support nearest teammate
+                target_x = ball_controller_pos.x + (defender_pos.x - ball_controller_pos.x) * 0.5
+                target_y = ball_controller_pos.y + (defender_pos.y - ball_controller_pos.y) * 0.5
             else:
-                # Too far - maintain defensive line
-                target_x = self.defensive_line_x
+                # Too far - but still move toward ball instead of just maintaining line
+                target_x = ball_pos.x + (self.defensive_line_x - ball_pos.x) * 0.3  # Compromise between ball and defensive line
                 target_y = ball_pos.y
                 
         else:
@@ -357,6 +391,16 @@ class OpponentAI:
         attacker_pos = attacker.player_body.position
         ball_distance = (ball_pos - attacker_pos).length
         
+        # Check if should participate in coordinated ball stealing
+        if self._should_participate_in_ball_steal(player_index, PlayerRole.ATTACKER):
+            return self._get_coordinated_steal_actions(attacker, player_index, ball_controller, 
+                                                     ball, team_players, actions)
+        
+        # If we have ball control and just stole it, use enhanced attack transition
+        if (ball_controller == attacker and game_state == GameState.ATTACK and 
+            current_time - self.last_ball_steal_time < 2.0):  # Within 2 seconds of steal
+            return self._get_post_steal_attack_actions(attacker, PlayerRole.ATTACKER, ball, actions)
+        
         # Default target position (will be overridden based on game state)
         target_x = ball_pos.x
         target_y = ball_pos.y
@@ -391,9 +435,32 @@ class OpponentAI:
                 target_y = run_target_y
                 
         elif game_state == GameState.DEFENSE and ball_controller:
-            # Opponent has ball - press the ball carrier
-            target_x = ball_controller.player_body.position.x
-            target_y = ball_controller.player_body.position.y
+            # Opponent has ball - AGGRESSIVE press and support
+            ball_controller_pos = ball_controller.player_body.position
+            
+            if ball_distance < self.pressure_distance * 1.8:  # Very aggressive for attackers
+                # Direct pressure on ball carrier
+                target_x = ball_controller_pos.x
+                target_y = ball_controller_pos.y
+            elif ball_distance < self.coordinated_press_distance:
+                # Support pressing by cutting off retreat routes
+                # Position between ball carrier and their goal
+                retreat_direction_x = self.own_goal_x - ball_controller_pos.x
+                retreat_direction_y = self.goal_center_y - ball_controller_pos.y
+                
+                # Normalize direction
+                retreat_length = (retreat_direction_x**2 + retreat_direction_y**2)**0.5
+                if retreat_length > 0:
+                    retreat_direction_x /= retreat_length
+                    retreat_direction_y /= retreat_length
+                
+                # Position to cut off retreat
+                target_x = ball_controller_pos.x + retreat_direction_x * 60
+                target_y = ball_controller_pos.y + retreat_direction_y * 60
+            else:
+                # Far away - still move toward ball to provide support
+                target_x = ball_pos.x
+                target_y = ball_pos.y
             
         else:
             # Loose ball - compete aggressively
@@ -421,6 +488,190 @@ class OpponentAI:
     def _can_take_action(self, current_time: float, player_index: int) -> bool:
         """Check if player can take action (not in cooldown)"""
         return current_time - self.player_action_cooldowns[player_index] > self.action_cooldown_time
+    
+    def _update_ball_stealing_coordination(self, team_players: List, opponent_players: List, 
+                                         ball, ball_controller, current_time: float):
+        """
+        Update coordinated ball stealing behavior - multiple players work together to steal ball.
+        """
+        # Check if opponent has ball control
+        if ball_controller not in opponent_players:
+            self.ball_steal_mode = False
+            self.ball_steal_target = None
+            self.ball_steal_participants = []
+            return
+        
+        ball_pos = ball.ball_body.position
+        
+        # Always find nearby players (more aggressive approach)
+        nearby_players = []
+        for i, player in enumerate(team_players):
+            if i == 0:  # Skip goalkeeper
+                continue
+            player_pos = player.player_body.position
+            distance_to_ball = (ball_pos - player_pos).length
+            if distance_to_ball < self.coordinated_press_distance:
+                nearby_players.append((player, i, distance_to_ball))
+        
+        # Sort by distance to ball (closest first)
+        nearby_players.sort(key=lambda x: x[2])
+        
+        # Always activate steal mode if we have ANY nearby players
+        if len(nearby_players) >= self.press_commitment_threshold:
+            if not self.ball_steal_mode:
+                self.ball_steal_mode = True
+                self.ball_steal_target = ball_controller
+                self.last_ball_steal_time = current_time
+            
+            # Limit participants to avoid all players clustering
+            selected_participants = nearby_players[:self.max_press_participants]
+            self.ball_steal_participants = [p[1] for p in selected_participants]
+            
+        else:
+            self.ball_steal_mode = False
+            self.ball_steal_target = None
+            self.ball_steal_participants = []
+            
+        # Also exit steal mode if ball carrier has changed or too much time passed
+        if (self.ball_steal_target != ball_controller or 
+            current_time - self.last_ball_steal_time > 8.0):  # Increased timeout to 8 seconds
+            self.ball_steal_mode = False
+            self.ball_steal_target = None
+            self.ball_steal_participants = []
+    
+    def _should_participate_in_ball_steal(self, player_index: int, role: PlayerRole) -> bool:
+        """
+        Determine if a player should participate in coordinated ball stealing.
+        """
+        # Goalkeeper never participates in field pressing
+        if role == PlayerRole.GOALKEEPER:
+            return False
+        
+        # If not in steal mode, use normal behavior
+        if not self.ball_steal_mode:
+            return False
+        
+        # Check if this player is designated as a steal participant
+        return player_index in self.ball_steal_participants
+    
+    def _get_coordinated_steal_actions(self, player, player_index: int, ball_controller, 
+                                      ball, team_players: List, actions: dict) -> dict:
+        """
+        Get actions for coordinated ball stealing - multiple players converge and support.
+        """
+        ball_pos = ball.ball_body.position
+        player_pos = player.player_body.position
+        controller_pos = ball_controller.player_body.position
+        
+        # Determine steal strategy based on player index
+        steal_participants_count = len(self.ball_steal_participants)
+        participant_rank = self.ball_steal_participants.index(player_index)
+        
+        if participant_rank == 0:  # Primary presser - go directly to ball carrier
+            target_x = controller_pos.x
+            target_y = controller_pos.y
+            
+        elif participant_rank == 1 and steal_participants_count > 1:  # Secondary presser - cut off escape route
+            # Position to cut off the most likely escape direction
+            escape_vector_x = controller_pos.x - ball_pos.x if abs(controller_pos.x - ball_pos.x) > 5 else self.attack_direction * 50
+            escape_vector_y = controller_pos.y - ball_pos.y if abs(controller_pos.y - ball_pos.y) > 5 else 0
+            
+            # Position ahead of ball carrier in their movement direction
+            target_x = controller_pos.x + escape_vector_x * 0.8
+            target_y = controller_pos.y + escape_vector_y * 0.8
+            
+        else:  # Support players - position for interceptions and second balls
+            # Position to intercept likely pass directions
+            goal_direction_x = self.opponent_goal_x - controller_pos.x
+            goal_direction_y = self.goal_center_y - controller_pos.y
+            
+            # Normalize and scale the direction vector
+            direction_length = (goal_direction_x**2 + goal_direction_y**2)**0.5
+            if direction_length > 0:
+                goal_direction_x = (goal_direction_x / direction_length) * self.intercept_distance
+                goal_direction_y = (goal_direction_y / direction_length) * self.intercept_distance
+            
+            # Position between ball carrier and their goal
+            target_x = controller_pos.x + goal_direction_x * 0.6
+            target_y = controller_pos.y + goal_direction_y * 0.6
+        
+        # Apply movement toward target
+        pos_diff_x = target_x - player_pos.x
+        pos_diff_y = target_y - player_pos.y
+        
+        # More aggressive movement in steal mode
+        movement_threshold = 8.0  # Lower threshold for more responsive movement
+        
+        if abs(pos_diff_x) > movement_threshold:
+            if pos_diff_x > 0:
+                actions['move_right'] = True
+            else:
+                actions['move_left'] = True
+        
+        if abs(pos_diff_y) > movement_threshold:
+            if pos_diff_y > 0:
+                actions['move_down'] = True
+            else:
+                actions['move_up'] = True
+        
+        # Attempt to steal ball if close enough
+        distance_to_controller = (controller_pos - player_pos).length
+        if distance_to_controller < self.ball_control_distance + 10:  # Slightly larger range for stealing
+            actions['shoot'] = True  # Use shoot action to challenge for ball
+        
+        return actions
+    
+    def _get_post_steal_attack_actions(self, player, role: PlayerRole, ball, actions: dict) -> dict:
+        """
+        Enhanced attack actions after successful ball steal - quick transition to goal attempts.
+        """
+        ball_pos = ball.ball_body.position
+        player_pos = player.player_body.position
+        
+        # Quick decision making for immediate attack
+        goal_distance = abs(ball_pos.x - self.opponent_goal_x)
+        
+        if role == PlayerRole.ATTACKER:
+            # Attackers should immediately push toward goal
+            if goal_distance < self.shot_distance_threshold:
+                # In shooting range - take quick shot
+                actions['shoot'] = True
+                return actions
+            else:
+                # Dribble quickly toward goal
+                target_x = self.opponent_goal_x
+                target_y = self.goal_center_y
+        
+        elif role == PlayerRole.DEFENDER:
+            # Defenders should look for quick forward pass or dribble
+            # Find the most advanced attacker
+            attackers = [p for i, p in enumerate(self.ball_steal_participants) if i >= 3]  # Get attacker indices
+            if attackers:
+                # Quick pass to forward player
+                actions['pass'] = True
+                return actions
+            else:
+                # No good pass - dribble forward quickly
+                target_x = ball_pos.x + (self.attack_direction * 60)
+                target_y = self.goal_center_y
+        
+        # Apply quick movement
+        pos_diff_x = target_x - player_pos.x
+        pos_diff_y = target_y - player_pos.y
+        
+        if abs(pos_diff_x) > 8:
+            if pos_diff_x > 0:
+                actions['move_right'] = True
+            else:
+                actions['move_left'] = True
+        
+        if abs(pos_diff_y) > 8:
+            if pos_diff_y > 0:
+                actions['move_down'] = True
+            else:
+                actions['move_up'] = True
+        
+        return actions
     
     def get_team_formation_info(self) -> dict:
         """

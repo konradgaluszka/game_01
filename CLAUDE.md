@@ -33,6 +33,24 @@ python ai/train.py train --timesteps 50000 --model-name phase3_ai --phase compet
 
 # Traditional training (no curriculum)
 python ai/train.py train --timesteps 100000 --model-name traditional_ai
+
+# NEW: CTDE (Centralized Training Decentralized Execution) Training - ADVANCED!
+python ai/train_ctde.py train --timesteps 100000 --model-name ctde_soccer_ai --n-envs 4
+
+# CTDE with curriculum learning
+python ai/train_ctde.py train --timesteps 100000 --model-name ctde_curriculum --curriculum --n-envs 4
+
+# CTDE self-play training
+python ai/train_ctde.py train --timesteps 50000 --model-name ctde_selfplay --self-play --opponent-model ai/models/ctde_soccer_ai_final.zip --n-envs 4
+
+# CTDE iterative self-play (most advanced)
+python ai/train_ctde.py train --timesteps 100000 --model-name ctde_iterative --curriculum --self-play --iterative-selfplay --opponent-model ai/models/ctde_curriculum_final.zip --update-freq 10000 --n-envs 4
+
+# RECOMMENDED: Simple CTDE training (easier to use, works reliably)
+python ai/train_ctde_simple.py train --timesteps 50000 --model-name simple_ctde --curriculum --n-envs 4
+
+# Simple CTDE self-play
+python ai/train_ctde_simple.py train --timesteps 50000 --model-name simple_ctde_selfplay --self-play --opponent-model ai/models/simple_ctde_simple_ctde_final.zip --n-envs 4
 ```
 
 ### Testing Commands
@@ -42,6 +60,15 @@ python main.py
 
 # Test training environment directly
 python ai/soccer_env.py
+
+# Test CTDE implementation
+python test_ctde.py
+
+# Evaluate CTDE models
+python ai/train_ctde.py evaluate --model-path ai/models/ctde_soccer_ai_final.zip --episodes 5
+
+# Evaluate Simple CTDE models (recommended)
+python ai/train_ctde_simple.py evaluate --model-path ai/models/simple_ctde_simple_ctde_final.zip --episodes 5
 ```
 
 ### Lint/TypeCheck Commands
@@ -122,6 +149,35 @@ python ai/soccer_env.py
   - Attack mode: Shoots, passes, and advances toward goal
   - Defense mode: Pressures ball carrier and takes defensive positions
   - Contest mode: Competes for loose balls
+
+### NEW: CTDE (Centralized Training Decentralized Execution) Architecture
+- **Individual Agent Observations**: 68-dimensional per agent with role-based features
+  - Agent identity and role embeddings (8 dims)
+  - Ball information relative to agent (6 dims)  
+  - Agent state and ball possession (5 dims)
+  - Teammate information (20 dims: 4 teammates × 5 dims)
+  - Opponent information (15 dims: 5 opponents × 3 dims)
+  - Field context for agent (10 dims)
+  - Match state (4 dims)
+
+- **Global Critic Observations**: 102-dimensional for centralized training
+  - Ball state (4 dims)
+  - All team_2 players with roles (50 dims: 5 players × 10 dims)
+  - All team_1 players (30 dims: 5 players × 6 dims)
+  - Global field context and team statistics (14 dims)
+  - Match state (4 dims)
+
+- **Role-Based Player Assignments**:
+  - Player 0: Goalkeeper (defensive specialist)
+  - Player 1: Defender (defensive positioning)
+  - Player 2-3: Midfielders (ball control and passing)
+  - Player 4: Forward (attacking specialist)
+
+- **Training Benefits**:
+  - Individual player specialization through role embeddings
+  - Better team coordination via centralized critic
+  - More sample-efficient training with shared parameters
+  - Enhanced self-play capabilities with role diversity
 
 ## Common Issues & Solutions
 

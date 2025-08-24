@@ -51,9 +51,9 @@ parser.add_argument("--team1-control", choices=["human", "model", "opponent_ai"]
                     help="Control method for team_1 (left/red): human=keyboard, model=trained_model, opponent_ai=rule_based_AI")
 parser.add_argument("--team2-control", choices=["human", "model", "opponent_ai", "none"], default="opponent_ai",
                     help="Control method for team_2 (right/blue): human=keyboard, model=trained_model, opponent_ai=rule_based_AI, none=no_control")
-parser.add_argument("--team1-model", type=str, default="ai/models/quick_iterative_final.zip",
+parser.add_argument("--team1-model", type=str, default="ai/models/ctde_curriculum_ctde_final.zip",
                     help="Path to trained model for team_1 (if using model control)")
-parser.add_argument("--team2-model", type=str, default="ai/models/quick_iterative_final.zip",
+parser.add_argument("--team2-model", type=str, default="ai/models/ctde_curriculum_ctde_final.zip",
                     help="Path to trained model for team_2 (if using model control)")
 args = parser.parse_args()
 
@@ -117,7 +117,9 @@ match = Match(
     pitch.goal_left.is_ball_inside_goal,    # Team_1's goal (team_2 scores here)
     pitch.goal_right.is_ball_inside_goal,   # Team_2's goal (team_1 scores here)
     ball,
-    resettable_objects=[ball, team_1, team_2]
+    resettable_objects=[ball, team_1, team_2],
+    pitch=pitch,                            # For set-piece field boundaries
+    all_players=all_players                 # For set-piece player management
 )
 
 # === AI CONTROLLER SETUP ===
@@ -170,6 +172,14 @@ draw_options = pymunk.pygame_util.DrawOptions(screen)
 clock = pygame.time.Clock()
 FPS = 60
 
+# === HELPER FUNCTIONS ===
+def _is_team_restricted(team_players, restricted_players):
+    """Check if any player in the team is restricted during set pieces"""
+    for player in team_players:
+        if player in restricted_players:
+            return True
+    return False
+
 # === MAIN GAME LOOP ===
 """
 Main game loop that runs at 60 FPS and handles:
@@ -210,20 +220,23 @@ while True:
     if controlled_team:
         controlled_team.control(keys)
     
+    # Check if set-piece restrictions are active
+    restricted_players = match.get_restricted_players() if match else []
+    
     # Team_1 AI control
-    if team_1_controller:
-        # Trained model control for team_1
+    if team_1_controller and not match.is_set_piece_active():
+        # Trained model control for team_1 (only during normal play)
         team_1_controller.control_team(team_1, ball, all_players, match)
-    elif team_1_opponent_ai:
-        # Rule-based AI control for team_1
+    elif team_1_opponent_ai and not _is_team_restricted(team_1.players(), restricted_players):
+        # Rule-based AI control for team_1 (only if not restricted)
         team_1_opponent_ai.control_team(team_1.players(), ball, team_2.players())
     
     # Team_2 AI control
-    if team_2_controller:
-        # Trained model control for team_2
+    if team_2_controller and not match.is_set_piece_active():
+        # Trained model control for team_2 (only during normal play)
         team_2_controller.control_team(team_2, ball, all_players, match)
-    elif team_2_opponent_ai:
-        # Rule-based AI control for team_2
+    elif team_2_opponent_ai and not _is_team_restricted(team_2.players(), restricted_players):
+        # Rule-based AI control for team_2 (only if not restricted)
         team_2_opponent_ai.control_team(team_2.players(), ball, team_1.players())
 
     # === RENDERING ===

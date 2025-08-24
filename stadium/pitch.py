@@ -44,7 +44,14 @@ class Pitch:
     """
 
     def __init__(self, space) -> None:
-        # Define wall positions
+        # Field boundary constants (playable area)
+        self.FIELD_TOP = 50
+        self.FIELD_BOTTOM = 550
+        self.FIELD_LEFT = 50
+        self.FIELD_RIGHT = 750
+        self.FIELD_CENTER_Y = (self.FIELD_TOP + self.FIELD_BOTTOM) // 2
+        
+        # Define wall positions (outside the playable area for physics)
         top_wall = pymunk.Segment(space.static_body, (0, -20), (800, -20), 20)
         bottom_wall = pymunk.Segment(space.static_body, (0, 620), (800, 620), 20)
         left_wall = pymunk.Segment(space.static_body, (-20, 0), (-20, 600), 20)
@@ -58,12 +65,6 @@ class Pitch:
         self.GOAL_COLOR = pygame.Color("grey")
         self.GOAL_WIDTH = 30
         self.GOAL_HEIGHT = 120  # Size of goal opening
-        self.FIELD_TOP = 0
-        self.FIELD_BOTTOM = 600
-        self.FIELD_LEFT = 50
-        self.FIELD_RIGHT = 750
-        self.FIELD_CENTER_Y = (self.FIELD_TOP + self.FIELD_BOTTOM) // 2
-
 
         # Goals with increased depth to reach screen edges (prevent ball from entering behind)
         self.goal_left = Goal(space = space, position = (52, 300), orientation="right", width=52)  # Extends to left edge (0)
@@ -86,6 +87,19 @@ class Pitch:
         pygame.draw.line(surface, WHITE, (400, 50), (400, 550), 3)
         # Center circle
         pygame.draw.circle(surface, WHITE, (400, 300), 60, 3)
-
+    
+    def get_field_bounds(self) -> dict:
+        """
+        Get the field boundaries for set-piece detection.
+        
+        Returns:
+            dict: Field boundaries with 'left', 'right', 'top', 'bottom' coordinates
+        """
+        return {
+            'left': self.FIELD_LEFT,
+            'right': self.FIELD_RIGHT, 
+            'top': self.FIELD_TOP,
+            'bottom': self.FIELD_BOTTOM
+        }
 
 

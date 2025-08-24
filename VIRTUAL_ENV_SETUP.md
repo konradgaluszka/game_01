@@ -1,21 +1,6 @@
 # Virtual Environment Setup Complete
 
-## Created Files:
-- `venv/` - Virtual environment directory
-- `activate_venv.bat` - Windows activation script
-- `activate_venv.sh` - Unix/Linux activation script
 
-## Installation Summary:
-✅ Virtual environment created successfully  
-✅ All dependencies installed:
-- pygame 2.6.1
-- pymunk 7.1.0  
-- gymnasium 1.2.0
-- stable-baselines3 2.7.0
-- torch 2.8.0
-- tensorboard 2.20.0
-- numpy, pandas, matplotlib, opencv-python
-- And all their dependencies
 
 ## Quick Start:
 
@@ -63,3 +48,5 @@ The virtual environment has been created and all dependencies installed successf
 3. **Evaluate models:** `python ai/train.py evaluate [model_path]`
 
 The initial model has been trained and saved to `ai/models/soccer_ai_final.zip`.
+
+python ai/train_ctde.py train --timesteps 100000 --model-name ctde_iterative --curriculum --self-play --iterative-selfplay --opponent-model ai/models/ctde_curriculum_final.zip --update-freq 10000 --n-envs 4
